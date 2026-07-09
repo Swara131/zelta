@@ -1,0 +1,22 @@
+{
+  "functions": {
+    "app/api/webhooks/stripe/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/translator/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/risk/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/notifications/retry/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/notifications/retry",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
