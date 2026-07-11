@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Menu, X } from "lucide-react";
+import { COMPANY_NAME } from "@/lib/public-branding";
 
 const LINKS = [
   { href: "#problem", label: "Problem" },
-  { href: "#solution", label: "Solution" },
   { href: "#how-it-works", label: "How it works" },
   { href: "#features", label: "Features" },
+  { href: "#architecture", label: "Architecture" },
+  { href: "#developers", label: "Developers" },
   { href: "#pricing", label: "Pricing" },
   { href: "#faq", label: "FAQ" },
 ];
@@ -34,14 +36,18 @@ export default function LandingNavbar() {
       }`}
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-brand)]" aria-label="ApprovalLayer home">
-          <div className="flex h-9 w-9 items-center justify-center rounded-[var(--ds-radius-sm)] bg-[var(--ds-brand)] shadow-[var(--ds-shadow-brand)]">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          aria-label={`${COMPANY_NAME} home`}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
             <Shield className="h-5 w-5 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
-          <span className="text-lg font-semibold tracking-tight text-white">ApprovalLayer</span>
+          <span className="text-lg font-semibold tracking-tight text-white">{COMPANY_NAME}</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
           {LINKS.map((link) => (
             <a
               key={link.href}
@@ -55,13 +61,13 @@ export default function LandingNavbar() {
 
         <div className="hidden items-center gap-3 md:flex">
           <Link
-            href="/upload"
+            href="/login"
             className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
           >
             Sign in
           </Link>
           <Link
-            href="/upload"
+            href="/signup"
             className="landing-cta-primary rounded-full px-5 py-2.5 text-sm font-semibold text-white"
           >
             Get started
@@ -72,7 +78,9 @@ export default function LandingNavbar() {
           type="button"
           className="rounded-lg p-2 text-zinc-400 md:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
-          aria-label="Toggle menu"
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
@@ -81,12 +89,13 @@ export default function LandingNavbar() {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
+            id="mobile-nav"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden border-t border-white/8 bg-[#0a0a0f]/95 backdrop-blur-xl md:hidden"
           >
-            <div className="flex flex-col gap-1 px-4 py-4">
+            <nav className="flex flex-col gap-1 px-4 py-4" aria-label="Mobile">
               {LINKS.map((link) => (
                 <a
                   key={link.href}
@@ -98,12 +107,13 @@ export default function LandingNavbar() {
                 </a>
               ))}
               <Link
-                href="/upload"
+                href="/signup"
+                onClick={() => setMobileOpen(false)}
                 className="landing-cta-primary mt-2 rounded-full py-3 text-center text-sm font-semibold text-white"
               >
                 Get started
               </Link>
-            </div>
+            </nav>
           </motion.div>
         )}
       </AnimatePresence>

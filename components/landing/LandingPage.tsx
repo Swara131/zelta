@@ -3,10 +3,10 @@ import AnimatedBackground from "./AnimatedBackground";
 import Hero from "./Hero";
 import LogoCloud from "./LogoCloud";
 import ProblemSection from "./ProblemSection";
-import SolutionSection from "./SolutionSection";
 import HowItWorks from "./HowItWorks";
 import FeaturesSection from "./FeaturesSection";
-import TestimonialsSection from "./TestimonialsSection";
+import ArchitectureSection from "./ArchitectureSection";
+import DeveloperCodeSection from "./DeveloperCodeSection";
 import LandingPricing from "./LandingPricing";
 import FAQSection from "./FAQSection";
 import CTASection from "./CTASection";
@@ -17,14 +17,14 @@ export default function LandingPage() {
     <div className="landing-page relative min-h-screen bg-[#06060a] text-zinc-100">
       <AnimatedBackground />
       <LandingNavbar />
-      <main>
+      <main id="main-content">
         <Hero />
         <LogoCloud />
         <ProblemSection />
-        <SolutionSection />
         <HowItWorks />
         <FeaturesSection />
-        <TestimonialsSection />
+        <ArchitectureSection />
+        <DeveloperCodeSection />
         <LandingPricing />
         <FAQSection />
         <CTASection />

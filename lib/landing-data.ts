@@ -1,151 +1,144 @@
-export const COMPANY_LOGOS = [
-  "Acme Corp",
-  "Northwind",
-  "Globex",
-  "Initech",
-  "Umbrella",
-  "Stark Industries",
+import { PRODUCT_NAME } from "./public-branding";
+
+export const BUILDER_LOGOS = [
+  "AgentForge",
+  "SynthOps",
+  "RunLayer",
+  "ToolMesh",
+  "Guardrail AI",
+  "FlowPilot",
 ];
 
 export const PROBLEMS = [
   {
-    title: "AI agents act without oversight",
+    title: "Agents execute before anyone sees the action",
     description:
-      "Autonomous agents execute privileged operations — database queries, secret access, permission grants — with no human in the loop.",
-    stat: "73%",
-    statLabel: "of orgs lack agent governance",
+      "Autonomous tools can mutate production data, access secrets, and change permissions with no deterministic gate between intent and execution.",
   },
   {
-    title: "Logs are unreadable",
+    title: "Policy and risk live in different systems",
     description:
-      "Technical agent logs are opaque to security teams and executives. Critical risks hide in JSON lines nobody can interpret.",
-    stat: "4.2h",
-    statLabel: "avg. time to triage an incident",
+      "Security rules sit in one place, ML signals in another, and human review in a third — making consistent decisions slow and error-prone.",
   },
   {
-    title: "Compliance gaps widen",
+    title: "Audit trails break at execution time",
     description:
-      "SOC 2, GDPR, and PCI-DSS require documented approval chains. Ad-hoc agent actions create audit failures and regulatory exposure.",
-    stat: "$4.8M",
-    statLabel: "avg. breach cost",
+      "Without binding approval to a one-time execution token, teams cannot prove who authorized what ran, when, and with which payload.",
   },
 ];
 
-export const SOLUTIONS = [
+export const GATEWAY_FLOW = [
   {
-    title: "Instant plain-English translation",
-    description: "AI converts technical agent logs into business-readable narratives with confidence scores.",
-    icon: "translate",
+    step: "01",
+    title: "Propose",
+    description: "Your agent sends tool intent, payload, and context to the gateway before running anything.",
+    status: "pending",
   },
   {
-    title: "Automated risk classification",
-    description: "ML maps every action to MITRE ATT&CK, OWASP, and compliance frameworks in real time.",
-    icon: "shield",
+    step: "02",
+    title: "Policy Engine",
+    description: "Deterministic rules evaluate action type, scope, and org policy — allow, block, or route to review.",
+    status: "policy",
   },
   {
-    title: "Human approval workflows",
-    description: "Policy-driven gates route critical actions through the right reviewers with SLA tracking.",
-    icon: "check",
+    step: "03",
+    title: "Hybrid Risk Classifier",
+    description: "Shadow or hybrid ML analysis scores severity and confidence without blocking the deterministic path.",
+    status: "risk",
   },
   {
-    title: "Immutable audit trail",
-    description: "Every decision cryptographically logged for SOC 2, ISO 27001, and forensic investigations.",
-    icon: "audit",
+    step: "04",
+    title: "Human Review",
+    description: "Reviewers approve, reject, or escalate with SLA deadlines and notification routing.",
+    status: "review",
   },
-];
-
-export const PIPELINE_STEPS = [
-  { label: "Upload", desc: "Ingest logs" },
-  { label: "Translate", desc: "AI plain English" },
-  { label: "Risk Detection", desc: "ML classify" },
-  { label: "Approval", desc: "Human review" },
-  { label: "Audit", desc: "Immutable log" },
-  { label: "Compliance", desc: "Report & export" },
+  {
+    step: "05",
+    title: "Execution Token",
+    description: "A single-use token binds the approved payload hash — replay and tampering are rejected at verify time.",
+    status: "token",
+  },
+  {
+    step: "06",
+    title: "Verify & Execute",
+    description: "The agent verifies the token against the exact action, then executes with a full immutable audit record.",
+    status: "execute",
+  },
 ];
 
 export const FEATURES = [
   {
-    title: "AI Translator",
-    description: "Convert agent action logs to plain English with typewriter streaming and confidence scoring.",
-    href: "/translator",
+    title: "Policy Engine",
+    description:
+      "Deterministic allow, block, and review rules keyed on action type, agent identity, and org-scoped policy configuration.",
+    icon: "policy",
   },
   {
-    title: "Risk Classifier",
-    description: "MITRE ATT&CK mapping, OWASP categories, and compliance impact on every detected risk.",
-    href: "/risk",
+    title: "Hybrid AI Risk Classifier",
+    description:
+      "Shadow, hybrid, or enforce modes combine ML severity signals with policy outcomes — escalate high-confidence risks to human review.",
+    icon: "risk",
   },
   {
-    title: "Approval Engine",
-    description: "Multi-tier review chains with Approve, Reject, Escalate, and SLA enforcement.",
-    href: "/approvals",
+    title: "Human Review",
+    description:
+      "Structured review queues with approve, reject, escalate, timeout handling, and reviewer notifications.",
+    icon: "review",
   },
   {
-    title: "Analytics Dashboard",
-    description: "Executive metrics, heatmaps, trends, and approval success rates at a glance.",
-    href: "/analytics",
+    title: "Audit Logs",
+    description:
+      "Every proposal, policy decision, risk signal, human verdict, and execution attempt is recorded for compliance and forensics.",
+    icon: "audit",
   },
   {
-    title: "Integrations",
-    description: "Connect Okta, AWS, Slack, Teams, Splunk, and 10+ enterprise platforms.",
-    href: "/integrations",
+    title: "Execution Tokens",
+    description:
+      "One-time, payload-bound tokens issued only after approval — consumed on successful verify to prevent replay.",
+    icon: "token",
   },
   {
     title: "Notifications",
-    description: "Email, Slack, and Teams alerts with delivery tracking and retry logic.",
-    href: "/notifications",
+    description:
+      "Email and in-app alerts when review is required, with deduplicated delivery and gateway event tracking.",
+    icon: "notify",
   },
 ];
 
-export const TESTIMONIALS = [
-  {
-    quote:
-      "ApprovalLayer cut our agent incident response time from hours to minutes. The AI translator alone saved our security team 20 hours a week.",
-    author: "Sarah Chen",
-    role: "CISO",
-    company: "Northwind Financial",
-    avatar: "SC",
-  },
-  {
-    quote:
-      "We passed our SOC 2 audit because every agent action now has a documented approval chain. This is the governance layer AI was missing.",
-    author: "Marcus Webb",
-    role: "VP Security",
-    company: "Globex Systems",
-    avatar: "MW",
-  },
-  {
-    quote:
-      "The risk classifier caught an unauthorized secrets access attempt our SIEM missed. ApprovalLayer is now mandatory for all production agents.",
-    author: "Alex Rivera",
-    role: "Head of DevOps",
-    company: "Initech Labs",
-    avatar: "AR",
-  },
+export const ARCHITECTURE_NODES = [
+  { id: "agent", label: "AI Agent", sub: "SDK / HTTP" },
+  { id: "gateway", label: "Gateway API", sub: "Propose · Status · Verify" },
+  { id: "policy", label: "Policy Engine", sub: "Deterministic rules" },
+  { id: "risk", label: "Risk Classifier", sub: "Shadow / Hybrid / Enforce" },
+  { id: "review", label: "Review Service", sub: "Human decisions" },
+  { id: "tokens", label: "Token Store", sub: "Single-use issuance" },
+  { id: "audit", label: "Audit Log", sub: "Immutable events" },
+  { id: "notify", label: "Notifications", sub: "Email & alerts" },
 ];
 
 export const FAQ_ITEMS = [
   {
-    q: "What log formats does ApprovalLayer support?",
-    a: "CSV, TXT, JSON, and LOG files. We auto-detect schema and validate on upload. API ingestion is available on Professional and Enterprise plans.",
+    q: `How does ${PRODUCT_NAME} sit in my agent stack?`,
+    a: "Agents call the gateway before executing a tool. Propose returns allow, block, or review_required. After approval, agents fetch an execution token and verify it immediately before running the action.",
   },
   {
-    q: "How does the AI Translator work?",
-    a: "Our fine-tuned model converts technical agent actions into plain-English explanations with affected systems, users, business impact, and confidence scores.",
+    q: "What is hybrid risk enforcement?",
+    a: "Hybrid mode keeps deterministic policy as the source of truth. ML can escalate an otherwise-allowed action to human review when severity is high or critical and model confidence meets your configured threshold.",
   },
   {
-    q: "Can I integrate with our existing IdP?",
-    a: "Yes. We support Google Workspace, Microsoft Entra ID, Okta, and SAML/SCIM on Enterprise. SSO is included in all paid plans.",
+    q: "Are execution tokens replay-safe?",
+    a: "Yes. Tokens are bound to the proposal payload hash, issued once after approval, and consumed on successful verify. Mismatched payloads or reused tokens are rejected.",
   },
   {
-    q: "Is my data stored securely?",
-    a: "All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Enterprise customers can choose dedicated VPC deployment.",
+    q: "Can I start in shadow mode?",
+    a: "Yes. Shadow mode runs risk analysis without changing policy outcomes — ideal for observing classifier behavior before enabling hybrid or enforce modes.",
   },
   {
     q: "What's included in the Free plan?",
-    a: "1,000 API calls/month, 500 MB storage, 3 users, basic risk scoring, and email notifications. Upgrade anytime for AI Translator and advanced features.",
+    a: "1,000 API calls per month, 500 MB storage, 3 users, basic risk scoring, and email notifications. Upgrade for advanced classifier modes, audit analytics, and higher limits.",
   },
   {
-    q: "Do you offer on-premise deployment?",
-    a: "Enterprise plans include self-hosted and air-gapped deployment options. Contact sales for architecture review.",
+    q: "Do you offer self-hosted deployment?",
+    a: "Enterprise plans include dedicated deployment options. Contact sales for architecture review and air-gapped requirements.",
   },
 ];

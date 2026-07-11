@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import Button from "./Button";
+import { COMPANY_NAME, PRODUCT_NAME } from "@/lib/public-branding";
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -35,6 +36,9 @@ export default function EmptyState({
           {actionLabel}
         </Button>
       )}
+      <p className="mt-6 text-xs text-[var(--ds-text-tertiary)]">
+        {COMPANY_NAME} · {PRODUCT_NAME}
+      </p>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import AuthShell from "@/components/auth/AuthShell";
 import ResetPasswordForm from "@/components/auth/ResetPasswordForm";
 
 export const metadata = {
-  title: "Set new password — ApprovalLayer",
+  title: "Set new password",
 };
 
 export default function ResetPasswordPage() {

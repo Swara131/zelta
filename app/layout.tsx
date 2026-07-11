@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { getMetadataBase, SITE_METADATA } from "@/lib/public-branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ApprovalLayer — AI Approval Layer for Enterprise Security",
-  description: "Govern every AI agent action. Upload logs, translate with AI, classify risks, and route approvals in one enterprise platform.",
+  metadataBase: getMetadataBase(),
+  title: {
+    default: SITE_METADATA.title,
+    template: `%s | ${SITE_METADATA.siteName}`,
+  },
+  description: SITE_METADATA.description,
+  applicationName: SITE_METADATA.siteName,
+  openGraph: SITE_METADATA.openGraph,
+  twitter: SITE_METADATA.twitter,
 };
 
 export default function RootLayout({

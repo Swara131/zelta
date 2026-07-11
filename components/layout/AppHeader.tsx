@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import LogoutButton from "@/components/auth/LogoutButton";
+import { COMPANY_NAME, DASHBOARD_SUBTITLE } from "@/lib/public-branding";
 import {
   Shield,
   Upload,
@@ -54,16 +55,16 @@ export default function AppHeader() {
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-brand)]"
-          aria-label="ApprovalLayer home"
+          aria-label={`${COMPANY_NAME} home`}
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-[var(--ds-radius-sm)] bg-[var(--ds-brand)] shadow-[var(--ds-shadow-brand)]">
             <Shield className="h-5 w-5 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-semibold tracking-tight text-[var(--ds-text-primary)]">
-              ApprovalLayer
+              {COMPANY_NAME}
             </p>
-            <p className="text-[11px] text-[var(--ds-text-tertiary)]">Enterprise security</p>
+            <p className="text-[11px] text-[var(--ds-text-tertiary)]">{DASHBOARD_SUBTITLE}</p>
           </div>
         </Link>
 

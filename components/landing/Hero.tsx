@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import {
+  COMPANY_NAME,
+  HERO_BODY,
+  PRODUCT_NAME,
+  TAGLINE,
+} from "@/lib/public-branding";
 import DashboardMockup from "./DashboardMockup";
 
 export default function Hero() {
@@ -13,32 +19,40 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-4 py-1.5 text-sm text-indigo-300"
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/25 bg-indigo-500/10 px-4 py-1.5 text-sm text-indigo-200 backdrop-blur-sm"
         >
-          <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
-          AI Approval Layer for Enterprise Security
+          {PRODUCT_NAME}
+          <span className="text-indigo-400/60" aria-hidden="true">
+            ·
+          </span>
+          AI Safety Gateway
         </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="landing-headline mx-auto max-w-4xl text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl"
+          className="landing-headline mx-auto max-w-4xl text-5xl font-bold tracking-tight text-white sm:text-7xl lg:text-8xl"
         >
-          Govern every{" "}
-          <span className="landing-gradient-text">AI agent action</span>
-          <br className="hidden sm:block" />
-          before it becomes a breach
+          <span className="landing-gradient-text">{COMPANY_NAME}</span>
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="mx-auto mt-6 max-w-2xl text-lg text-zinc-400 sm:text-xl"
+          transition={{ duration: 0.7, delay: 0.15 }}
+          className="mx-auto mt-5 max-w-3xl text-xl font-medium tracking-tight text-zinc-200 sm:text-2xl"
         >
-          Upload agent logs, translate them with AI, classify risks, and route
-          approvals — all in one enterprise-grade security platform.
+          {TAGLINE}
+        </motion.p>
+
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400 sm:text-xl"
+        >
+          {HERO_BODY}
         </motion.p>
 
         <motion.div
@@ -48,17 +62,21 @@ export default function Hero() {
           className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
         >
           <Link
-            href="/upload"
+            href="/signup"
             className="landing-cta-primary group inline-flex items-center gap-2 rounded-full px-8 py-4 text-base font-semibold text-white"
           >
-            Start for free
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
+            Start building
+            <ArrowRight
+              className="h-4 w-4 transition-transform group-hover:translate-x-1"
+              strokeWidth={2.5}
+              aria-hidden="true"
+            />
           </Link>
           <Link
-            href="/pipeline"
-            className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-8 py-4 text-base font-semibold text-zinc-300 transition-all hover:bg-white/8 hover:text-white"
+            href="#developers"
+            className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-8 py-4 text-base font-semibold text-zinc-300 backdrop-blur-sm transition-all hover:bg-white/8 hover:text-white"
           >
-            View live demo
+            View API example
           </Link>
         </motion.div>
 

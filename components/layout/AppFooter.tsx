@@ -1,3 +1,5 @@
+import { COMPANY_NAME } from "@/lib/public-branding";
+
 export default function AppFooter() {
   return (
     <footer
@@ -5,7 +7,7 @@ export default function AppFooter() {
       role="contentinfo"
     >
       <p className="ds-caption">
-        © {new Date().getFullYear()} ApprovalLayer — AI Approval Layer for Enterprise Security
+        © {new Date().getFullYear()} {COMPANY_NAME}
       </p>
     </footer>
   );

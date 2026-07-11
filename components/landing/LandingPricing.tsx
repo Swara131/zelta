@@ -20,8 +20,11 @@ export default function LandingPricing() {
         >
           <p className="text-sm font-semibold uppercase tracking-wider text-emerald-400">Pricing</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Simple, transparent pricing
+            Plans that scale with your agents
           </h2>
+          <p className="mx-auto mt-4 max-w-lg text-sm text-zinc-500">
+            Start free with the gateway API. Upgrade for hybrid enforcement, analytics, and enterprise controls.
+          </p>
           <div className="mt-8 inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10">
             <button
               type="button"
