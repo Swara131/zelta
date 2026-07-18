@@ -36,6 +36,8 @@ export interface Invoice {
 
 export interface BillingData {
   currentPlan: PlanId;
+  /** True when DEMO_MODE=true; feature checks use Enterprise access without changing stored plan. */
+  demoMode: boolean;
   interval: BillingInterval;
   usage: UsageMetric[];
   invoices: Invoice[];

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test lib/gateway/**/*.test.ts lib/ui/**/*.test.ts lib/email/**/*.test.ts lib/approvals/**/*.test.ts",
+    "test": "npx tsx --test lib/gateway/**/*.test.ts lib/ui/**/*.test.ts lib/email/**/*.test.ts lib/approvals/**/*.test.ts lib/billing/**/*.test.ts",
     "demo:agent": "tsx scripts/demo-agent.ts"
   },
   "dependencies": {

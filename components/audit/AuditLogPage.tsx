@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { History, Filter } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
+import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import AuditTimelineFeed from "./AuditTimelineFeed";
 import type { AuditTimelineEntry } from "@/lib/audit/types";
@@ -110,10 +111,12 @@ export default function AuditLogPage() {
         title="Audit Log"
         description="Immutable timeline of gateway runtime events and retrospective log-analysis activity for your organization."
         badge={
-          <span className="ds-badge ds-badge-brand">
-            <History className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-            {entries.length} events
-          </span>
+          <PageHeaderBadges>
+            <span className="ds-badge ds-badge-brand">
+              <History className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+              {entries.length} events
+            </span>
+          </PageHeaderBadges>
         }
       />
 

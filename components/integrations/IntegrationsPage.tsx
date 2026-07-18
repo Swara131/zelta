@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
+import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import type { AgentApiKeyRecord } from "@/lib/gateway/types";
@@ -190,10 +191,12 @@ export default function IntegrationsPage() {
         title="Developer Integration"
         description="Create agent API keys and connect external agents to the pre-execution gateway. Plaintext keys are shown once at creation — only prefixes are stored in the dashboard."
         badge={
-          <span className="ds-badge ds-badge-brand">
-            <Key className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-            {activeKeys.length} active keys
-          </span>
+          <PageHeaderBadges>
+            <span className="ds-badge ds-badge-brand">
+              <Key className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+              {activeKeys.length} active keys
+            </span>
+          </PageHeaderBadges>
         }
       />
 

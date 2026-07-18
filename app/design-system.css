@@ -575,6 +575,12 @@
   color: var(--ds-text-tertiary);
 }
 
+.ds-badge-demo {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+}
+
 .ds-panel {
   background: var(--ds-bg-elevated);
   border: 1px solid var(--ds-border);

@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlanId } from "@/lib/billing-types";
 import { ensureOrganization } from "@/lib/organizations/ensure-organization";
-import { PlanRequiredError, UsageLimitError } from "./errors";
 import {
-  hasFeature,
-  hasMinimumPlan,
-  type PremiumFeature,
-} from "./plans";
+  canAccessFeature,
+  canAccessMinimumPlan,
+  requiredPlanForFeature,
+} from "./access";
+import { PlanRequiredError, UsageLimitError } from "./errors";
+import type { PremiumFeature } from "./plans";
 import {
   effectivePlan,
   getOrgSubscription,
@@ -35,24 +36,32 @@ export async function requireMinimumPlan(
   context: BillingContext,
   minimumPlan: PlanId
 ): Promise<void> {
-  if (!hasMinimumPlan(context.plan, minimumPlan)) {
-    throw new PlanRequiredError(minimumPlan, context.plan);
+  if (canAccessMinimumPlan(context.plan, minimumPlan)) {
+    return;
   }
+
+  // Preserve existing local-dev bypass when demo mode is off.
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  throw new PlanRequiredError(minimumPlan, context.plan);
 }
 
 export async function requireFeatureAccess(
   context: BillingContext,
   feature: PremiumFeature
 ): Promise<void> {
-  // Local dev: unlock premium APIs without Stripe (production keeps plan gates).
+  if (canAccessFeature(context.plan, feature)) {
+    return;
+  }
+
+  // Preserve existing local-dev bypass when demo mode is off.
   if (process.env.NODE_ENV !== "production") {
     return;
   }
 
-  if (!hasFeature(context.plan, feature)) {
-    const requiredPlan = feature === "integrations" ? "enterprise" : "professional";
-    throw new PlanRequiredError(requiredPlan, context.plan);
-  }
+  throw new PlanRequiredError(requiredPlanForFeature(feature), context.plan);
 }
 
 export function billingErrorResponse(err: unknown): {

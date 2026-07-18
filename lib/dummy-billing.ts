@@ -61,6 +61,7 @@ export const PLANS: Plan[] = [
 
 export const DUMMY_BILLING: BillingData = {
   currentPlan: "free",
+  demoMode: false,
   interval: "monthly",
   nextBillingDate: "2026-07-28T00:00:00Z",
   paymentMethod: {

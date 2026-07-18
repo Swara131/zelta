@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlanId } from "@/lib/billing-types";
+import { shouldEnforceUsageLimits } from "./access";
 import { BillingError, UsageLimitError } from "./errors";
 import { PLAN_LIMITS } from "./plans";
 import type { SubscriptionRow } from "./repository";
@@ -72,6 +73,10 @@ export function isWithinLimit(
   used: number,
   additional = 0
 ): boolean {
+  if (!shouldEnforceUsageLimits()) {
+    return true;
+  }
+
   const limits = PLAN_LIMITS[plan];
   const key =
     metric === "apiCalls"
@@ -89,8 +94,13 @@ export async function assertUsageCapacity(
   metric: keyof OrgUsage,
   additional = 0
 ): Promise<OrgUsage> {
-  const plan = effectivePlan(subscription);
   const usage = await getOrgUsage(supabase, organizationId, subscription);
+
+  if (!shouldEnforceUsageLimits()) {
+    return usage;
+  }
+
+  const plan = effectivePlan(subscription);
 
   if (!isWithinLimit(plan, metric, usage[metric], additional)) {
     throw new UsageLimitError(metric);

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
+import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
 import SectionHeader from "@/components/ui/SectionHeader";
 import Button from "@/components/ui/Button";
 import RiskGauge from "./RiskGauge";
@@ -103,6 +104,7 @@ export default function RiskAnalysisPage() {
         icon={ShieldAlert}
         title="Risk Analysis"
         description="Security assessment of translated agent action logs"
+        badge={<PageHeaderBadges />}
         actions={
           <>
             <Button

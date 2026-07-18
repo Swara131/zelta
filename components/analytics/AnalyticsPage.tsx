@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
+import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
 import SectionHeader from "@/components/ui/SectionHeader";
 import Button from "@/components/ui/Button";
 import MetricCard from "./MetricCard";
@@ -67,10 +68,12 @@ export default function AnalyticsPage() {
         title="Analytics"
         description="Executive dashboard for agent action monitoring and approval performance."
         badge={
-          <span className="ds-badge ds-badge-success">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
-            Live
-          </span>
+          <PageHeaderBadges>
+            <span className="ds-badge ds-badge-success">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
+              Live
+            </span>
+          </PageHeaderBadges>
         }
         actions={
           <Button variant="secondary" size="sm" icon={Download} onClick={handleExport}>

@@ -5,8 +5,10 @@ import { Sparkles } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
 import PlanUpgradeNotice, { isPlanRequiredMessage } from "@/components/ui/PlanUpgradeNotice";
-import { hasFeature } from "@/lib/billing/plans";
+import { canAccessFeature } from "@/lib/billing/access";
 import type { PlanId } from "@/lib/billing-types";
+import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import TranslatorUploadArea from "./TranslatorUploadArea";
 import TechnicalLogPanel from "./TechnicalLogPanel";
 import TranslationPanel from "./TranslationPanel";
@@ -107,6 +109,7 @@ export default function TranslatorPage() {
   const [activeLine, setActiveLine] = useState<number | undefined>();
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [translatorLocked, setTranslatorLocked] = useState(false);
+  const { demoMode } = useDemoMode();
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingIndexRef = useRef(-1);
   const translationsRef = useRef<TranslatedAction[]>([]);
@@ -157,20 +160,31 @@ export default function TranslatorPage() {
   }, []);
 
   useEffect(() => {
+    if (demoMode) {
+      setTranslatorLocked(false);
+      return;
+    }
+
     fetch("/api/billing")
       .then(async (response) => {
         const data = (await response.json()) as {
           currentPlan?: PlanId;
+          demoMode?: boolean;
           error?: string;
         };
-        if (response.ok && data.currentPlan) {
-          setTranslatorLocked(!hasFeature(data.currentPlan, "translator"));
+        if (!response.ok || !data.currentPlan) {
+          return;
         }
+
+        const unlocked =
+          Boolean(data.demoMode) ||
+          canAccessFeature(data.currentPlan, "translator", false);
+        setTranslatorLocked(!unlocked);
       })
       .catch(() => {
         /* billing lookup optional for UI hint */
       });
-  }, []);
+  }, [demoMode]);
 
   const startTranslation = useCallback(async () => {
     clearTimers();
@@ -201,13 +215,15 @@ export default function TranslatorPage() {
       const message =
         err instanceof Error ? err.message : "Translation failed. Please try again.";
       if (isPlanRequiredMessage(message)) {
-        setTranslatorLocked(true);
+        if (!demoMode) {
+          setTranslatorLocked(true);
+        }
         setTranslateError(null);
       } else {
         setTranslateError(message);
       }
     }
-  }, [logContent, filename, uploadedLogId, beginRevealAnimation]);
+  }, [logContent, filename, uploadedLogId, beginRevealAnimation, demoMode]);
 
   const handleTypingComplete = useCallback(() => {
     const next = typingIndexRef.current + 1;
@@ -264,7 +280,9 @@ export default function TranslatorPage() {
       const message =
         err instanceof Error ? err.message : "Failed to load uploaded log.";
       if (isPlanRequiredMessage(message)) {
-        setTranslatorLocked(true);
+        if (!demoMode) {
+          setTranslatorLocked(true);
+        }
         setTranslateError(null);
       } else {
         setTranslateError(message);
@@ -315,6 +333,7 @@ export default function TranslatorPage() {
         icon={Sparkles}
         title="AI Translator"
         description="Convert complex agent action logs into clear, business-readable explanations. Powered by AI with confidence scoring and impact analysis."
+        badge={<PageHeaderBadges />}
       />
 
       <section className="ds-section fade-in-up" style={{ animationDelay: "0.05s" }}>
@@ -329,9 +348,9 @@ export default function TranslatorPage() {
           onUploadSelect={handleUploadSelect}
           loadingUploads={loadingUploads}
           loadingLog={loadingLog}
-          planLocked={translatorLocked}
+          planLocked={translatorLocked && !demoMode}
         />
-        {translatorLocked ? (
+        {translatorLocked && !demoMode ? (
           <PlanUpgradeNotice featureLabel="AI Translator" requiredPlan="Professional" />
         ) : (
           translateError && (

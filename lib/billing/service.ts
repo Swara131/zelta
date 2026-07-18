@@ -4,6 +4,7 @@ import { ensureOrganization } from "@/lib/organizations/ensure-organization";
 import { getAppUrl, getStripePriceId } from "./env";
 import { BillingError } from "./errors";
 import { buildUsageMetrics, PLAN_LABELS } from "./plans";
+import { isDemoMode } from "./demo-mode";
 import {
   effectivePlan,
   getOrgSubscription,
@@ -106,6 +107,7 @@ export async function getBillingData(
 
   return {
     currentPlan: plan,
+    demoMode: isDemoMode(),
     interval: subscription?.billing_interval ?? "monthly",
     usage: buildUsageMetrics(plan, usageSnapshot),
     invoices,
