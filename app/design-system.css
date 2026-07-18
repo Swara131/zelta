@@ -443,6 +443,38 @@
   outline-offset: 1px;
 }
 
+.app-header-nav {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(129, 140, 248, 0.35) transparent;
+}
+
+.app-header-nav .app-header-tabs {
+  display: inline-flex;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  gap: 0.125rem;
+}
+
+.app-header-tabs .ds-tab {
+  padding: 0.4375rem 0.6875rem;
+  font-size: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .app-header-tabs .ds-tab {
+    padding: 0.5rem 0.8125rem;
+    font-size: 0.8125rem;
+  }
+}
+
 /* Page layout */
 .ds-page {
   flex: 1;

@@ -4,7 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import LogoutButton from "@/components/auth/LogoutButton";
-import { COMPANY_NAME, DASHBOARD_SUBTITLE } from "@/lib/public-branding";
+import {
+  COMPANY_NAME,
+  DASHBOARD_SUBTITLE,
+} from "@/lib/public-branding";
 import {
   Shield,
   Upload,
@@ -51,16 +54,16 @@ export default function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--ds-border)] bg-[var(--ds-bg-elevated)]/90 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-brand)]"
-          aria-label={`${COMPANY_NAME} home`}
+          href="/upload"
+          className="flex min-w-0 shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-brand)]"
+          aria-label={`${COMPANY_NAME} dashboard home`}
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-[var(--ds-radius-sm)] bg-[var(--ds-brand)] shadow-[var(--ds-shadow-brand)]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--ds-radius-sm)] bg-[var(--ds-brand)] shadow-[var(--ds-shadow-brand)]">
             <Shield className="h-5 w-5 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
-          <div className="hidden sm:block">
+          <div className="hidden min-w-0 sm:block">
             <p className="text-sm font-semibold tracking-tight text-[var(--ds-text-primary)]">
               {COMPANY_NAME}
             </p>
@@ -68,11 +71,28 @@ export default function AppHeader() {
           </div>
         </Link>
 
-        <nav
-          className="hidden min-w-0 flex-1 items-center justify-center lg:flex"
-          aria-label="Main navigation"
+        <div className="hidden items-center gap-2 md:flex">
+          <LogoutButton />
+        </div>
+
+        <button
+          type="button"
+          className="ds-btn ds-btn-ghost ds-btn-icon shrink-0 md:hidden"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
-          <div className="ds-tabs max-w-full">
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+      </div>
+
+      <nav
+        className="app-header-nav hidden border-t border-[var(--ds-border)] md:block"
+        aria-label="Main navigation"
+      >
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="ds-tabs app-header-tabs py-2">
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
               const active = pathname === href;
               return (
@@ -82,50 +102,14 @@ export default function AppHeader() {
                   aria-current={active ? "page" : undefined}
                   className={`ds-tab inline-flex items-center gap-1.5 ${active ? "ds-tab-active" : ""}`}
                 >
-                  <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                  <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                   {label}
                 </Link>
               );
             })}
           </div>
-        </nav>
-
-        <nav
-          className="hidden min-w-0 flex-1 overflow-x-auto md:flex lg:hidden"
-          aria-label="Main navigation"
-        >
-          <div className="ds-tabs mx-auto">
-            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  title={label}
-                  aria-current={active ? "page" : undefined}
-                  aria-label={label}
-                  className={`ds-tab inline-flex items-center ${active ? "ds-tab-active" : ""}`}
-                >
-                  <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-
-        <LogoutButton />
-
-        <button
-          type="button"
-          className="ds-btn ds-btn-ghost ds-btn-icon ml-auto md:ml-0 md:hidden"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          aria-expanded={mobileOpen}
-          aria-controls="mobile-nav"
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
+        </div>
+      </nav>
 
       {mobileOpen && (
         <nav
@@ -148,7 +132,7 @@ export default function AppHeader() {
                         : "text-[var(--ds-text-secondary)] hover:bg-[var(--ds-bg-subtle)]"
                     }`}
                   >
-                    <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
                     {label}
                   </Link>
                 </li>
@@ -161,7 +145,7 @@ export default function AppHeader() {
                 disabled={signingOut}
                 className="flex w-full items-center gap-2 rounded-[var(--ds-radius-sm)] px-3 py-2.5 text-sm font-medium text-[var(--ds-text-secondary)] hover:bg-[var(--ds-bg-subtle)]"
               >
-                <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
                 {signingOut ? "Signing out…" : "Sign out"}
               </button>
             </li>

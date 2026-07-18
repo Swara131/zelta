@@ -16,6 +16,7 @@ interface TranslatorUploadAreaProps {
   onUploadSelect?: (uploadId: string) => void;
   loadingUploads?: boolean;
   loadingLog?: boolean;
+  planLocked?: boolean;
 }
 
 export default function TranslatorUploadArea({
@@ -29,6 +30,7 @@ export default function TranslatorUploadArea({
   onUploadSelect,
   loadingUploads = false,
   loadingLog = false,
+  planLocked = false,
 }: TranslatorUploadAreaProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -53,6 +55,7 @@ export default function TranslatorUploadArea({
   };
 
   const busy = isTranslating || loadingLog;
+  const translateDisabled = !hasContent || busy || planLocked;
 
   return (
     <div
@@ -149,7 +152,7 @@ export default function TranslatorUploadArea({
         <button
           type="button"
           onClick={onTranslate}
-          disabled={!hasContent || busy}
+          disabled={translateDisabled}
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-all hover:from-violet-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Languages className="h-4 w-4" strokeWidth={2} />

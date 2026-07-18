@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
+import PlanUpgradeNotice, { isPlanRequiredMessage } from "@/components/ui/PlanUpgradeNotice";
+import { hasFeature } from "@/lib/billing/plans";
+import type { PlanId } from "@/lib/billing-types";
 import TranslatorUploadArea from "./TranslatorUploadArea";
 import TechnicalLogPanel from "./TechnicalLogPanel";
 import TranslationPanel from "./TranslationPanel";
@@ -103,6 +106,7 @@ export default function TranslatorPage() {
   const [typingIndex, setTypingIndex] = useState(-1);
   const [activeLine, setActiveLine] = useState<number | undefined>();
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [translatorLocked, setTranslatorLocked] = useState(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingIndexRef = useRef(-1);
   const translationsRef = useRef<TranslatedAction[]>([]);
@@ -152,6 +156,22 @@ export default function TranslatorPage() {
       .finally(() => setLoadingUploads(false));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/billing")
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          currentPlan?: PlanId;
+          error?: string;
+        };
+        if (response.ok && data.currentPlan) {
+          setTranslatorLocked(!hasFeature(data.currentPlan, "translator"));
+        }
+      })
+      .catch(() => {
+        /* billing lookup optional for UI hint */
+      });
+  }, []);
+
   const startTranslation = useCallback(async () => {
     clearTimers();
     setTranslateError(null);
@@ -178,9 +198,14 @@ export default function TranslatorPage() {
       }
     } catch (err) {
       setStatus("idle");
-      setTranslateError(
-        err instanceof Error ? err.message : "Translation failed. Please try again."
-      );
+      const message =
+        err instanceof Error ? err.message : "Translation failed. Please try again.";
+      if (isPlanRequiredMessage(message)) {
+        setTranslatorLocked(true);
+        setTranslateError(null);
+      } else {
+        setTranslateError(message);
+      }
     }
   }, [logContent, filename, uploadedLogId, beginRevealAnimation]);
 
@@ -236,9 +261,14 @@ export default function TranslatorPage() {
       setLogContent("");
       setFilename(null);
       setUploadedLogId(null);
-      setTranslateError(
-        err instanceof Error ? err.message : "Failed to load uploaded log."
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to load uploaded log.";
+      if (isPlanRequiredMessage(message)) {
+        setTranslatorLocked(true);
+        setTranslateError(null);
+      } else {
+        setTranslateError(message);
+      }
     } finally {
       setLoadingLog(false);
     }
@@ -299,11 +329,16 @@ export default function TranslatorPage() {
           onUploadSelect={handleUploadSelect}
           loadingUploads={loadingUploads}
           loadingLog={loadingLog}
+          planLocked={translatorLocked}
         />
-        {translateError && (
-          <p className="mt-3 text-sm text-red-400" role="alert">
-            {translateError}
-          </p>
+        {translatorLocked ? (
+          <PlanUpgradeNotice featureLabel="AI Translator" requiredPlan="Professional" />
+        ) : (
+          translateError && (
+            <p className="mt-3 text-sm text-red-400" role="alert">
+              {translateError}
+            </p>
+          )
         )}
       </section>
 
