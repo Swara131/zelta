@@ -73,19 +73,31 @@ async function fetchTranslations(params: {
   filename?: string | null;
   uploadedLogId?: string | null;
 }): Promise<TranslatedAction[]> {
+  const payload: Record<string, string> = {};
+  if (params.uploadedLogId) {
+    payload.uploadedLogId = params.uploadedLogId;
+  } else if (params.logContent?.trim()) {
+    payload.logContent = params.logContent;
+  }
+  if (params.filename) {
+    payload.filename = params.filename;
+  }
+
   const response = await fetch("/api/translator", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify(payload),
   });
 
   const data = (await response.json()) as {
     translations?: TranslatedAction[];
     error?: string;
+    details?: string[];
   };
 
   if (!response.ok) {
-    throw new Error(data.error ?? "Translation request failed.");
+    const detailText = data.details?.length ? ` ${data.details.join(" ")}` : "";
+    throw new Error((data.error ?? "Translation request failed.") + detailText);
   }
 
   if (!data.translations?.length) {

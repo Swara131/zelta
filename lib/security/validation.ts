@@ -17,7 +17,7 @@ export const translatorPostSchema = z
   .object({
     logContent: z.string().trim().max(5_000_000).optional(),
     filename: z.string().trim().max(255).nullable().optional(),
-    uploadedLogId: uuidSchema.optional(),
+    uploadedLogId: uuidSchema.nullish(),
   })
   .refine(
     (data) => Boolean(data.uploadedLogId || data.logContent),
