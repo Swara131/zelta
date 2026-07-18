@@ -1,4 +1,7 @@
 import type { MatchedPolicyReason, PolicyDecisionOutcome } from "@/lib/gateway/policy/types";
+import type { StoredShadowRiskRecord } from "@/lib/gateway/risk/shadow-store";
+import type { StoredDecisionComposition } from "@/lib/gateway/risk/decision-composition";
+import type { StoredReviewEscalation } from "@/lib/gateway/review/timeout";
 import {
   enrichProposalWithGroq,
   type ProposalEnrichmentInput,
@@ -17,6 +20,12 @@ export interface StoredRiskReasons {
       recordedAt: string;
     };
   };
+  /** Observational shadow classifier output — never overrides policy. */
+  shadow?: StoredShadowRiskRecord;
+  /** Effective decision composition (deterministic + risk). */
+  decisionComposition?: StoredDecisionComposition;
+  /** Review timeout escalation metadata (extensible without org roles). */
+  reviewEscalation?: StoredReviewEscalation;
 }
 
 export type EnrichmentOutcome =

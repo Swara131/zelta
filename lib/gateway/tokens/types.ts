@@ -3,7 +3,8 @@ export type ExternalProposalStatus =
   | "approved"
   | "rejected"
   | "blocked"
-  | "expired";
+  | "expired"
+  | "executed";
 
 export type ExecutionTokenStatus = "active" | "used" | "revoked" | "expired";
 

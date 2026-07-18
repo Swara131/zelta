@@ -1,8 +1,10 @@
 import type { PendingApproval, ApprovalPriority } from "@/lib/approval-types";
 import type { RiskSeverity } from "@/lib/risk-types";
 import type { MatchedPolicyReason } from "@/lib/gateway/policy/types";
+import { policyDecisionFromDb } from "@/lib/gateway/policy/types";
 import type { StoredRiskReasons } from "./enrichment";
 import { extractMatchedPoliciesFromRiskReasons } from "./enrichment";
+import { mapShadowRiskDisplay } from "@/lib/ui/shadow-risk-display";
 import type { ActionProposalRow } from "./repository";
 
 const SEVERITIES = new Set<RiskSeverity>(["critical", "high", "medium", "low"]);
@@ -93,7 +95,7 @@ export function mapReviewProposalToPendingApproval(
     ],
     history: [],
     submittedAt: row.created_at,
-    slaDeadline: row.expires_at,
+    slaDeadline: row.review_expires_at ?? row.expires_at,
     assignee: "Unassigned",
     requester: row.agent_id,
     source: "gateway",
@@ -104,5 +106,7 @@ export function mapReviewProposalToPendingApproval(
     matchedPolicies,
     aiRiskReasons,
     riskScore: row.risk_score,
+    gatewayDecision: policyDecisionFromDb(row.policy_decision) ?? undefined,
+    shadowRisk: mapShadowRiskDisplay(row.risk_reasons, row.policy_decision),
   };
 }

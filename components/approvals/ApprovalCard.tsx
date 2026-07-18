@@ -28,11 +28,13 @@ import PriorityBadge from "./PriorityBadge";
 import ConfidenceScore from "./ConfidenceScore";
 import ApprovalTimeline from "./ApprovalTimeline";
 import ApprovalHistory from "./ApprovalHistory";
+import ShadowRiskAssessmentPanel from "./ShadowRiskAssessmentPanel";
 import type { PendingApproval, ApprovalStatus } from "@/lib/approval-types";
 
 interface ApprovalCardProps {
   approval: PendingApproval;
   index: number;
+  highlighted?: boolean;
   onAction: (id: string, action: ApprovalStatus, comment?: string) => void | Promise<void>;
 }
 
@@ -75,7 +77,12 @@ function formatTimestamp(value: string) {
   });
 }
 
-export default function ApprovalCard({ approval, index, onAction }: ApprovalCardProps) {
+export default function ApprovalCard({
+  approval,
+  index,
+  highlighted = false,
+  onAction,
+}: ApprovalCardProps) {
   const [comment, setComment] = useState("");
   const [actionLoading, setActionLoading] = useState<ApprovalStatus | null>(null);
   const sla = getSlaStatus(approval.slaDeadline);
@@ -92,8 +99,11 @@ export default function ApprovalCard({ approval, index, onAction }: ApprovalCard
 
   return (
     <article
-      className="approval-card ds-panel overflow-hidden"
+      className={`approval-card ds-panel overflow-hidden transition-shadow ${
+        highlighted ? "ring-2 ring-indigo-400/30 shadow-lg shadow-indigo-500/10" : ""
+      }`}
       style={{ animationDelay: `${index * 100}ms` }}
+      data-proposal-id={approval.id}
     >
       {/* Top accent by severity */}
       <div
@@ -231,6 +241,10 @@ export default function ApprovalCard({ approval, index, onAction }: ApprovalCard
               ))}
             </ul>
           </div>
+        )}
+
+        {isGateway && approval.shadowRisk && (
+          <ShadowRiskAssessmentPanel shadowRisk={approval.shadowRisk} />
         )}
 
         {/* Detail grid */}

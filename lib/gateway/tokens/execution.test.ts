@@ -19,6 +19,7 @@ import {
   verifyProposalExecution,
   type ExecutionTokenDeps,
 } from "@/lib/gateway/tokens/service";
+import { applyReviewTimeoutIfExpired } from "@/lib/gateway/review/timeout";
 
 const ORG_A = "11111111-1111-4111-8111-111111111111";
 const ORG_B = "22222222-2222-4222-8222-222222222222";
@@ -76,6 +77,11 @@ function buildProposalRow(
     updated_at: overrides.updated_at ?? new Date().toISOString(),
     expires_at:
       overrides.expires_at ?? new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    review_expires_at:
+      overrides.review_expires_at ??
+      (overrides.status === "review_required"
+        ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        : null),
     decided_at: overrides.decided_at ?? new Date().toISOString(),
     executed_at: overrides.executed_at ?? null,
   };
@@ -152,11 +158,86 @@ function createExecutionDeps(state: TokenStoreState): ExecutionTokenDeps {
       token.updated_at = params.consumedAt;
       return { ...token };
     },
+    markExecuted: async (_supabase, params) => {
+      if (
+        state.proposal.id !== params.proposalId ||
+        state.proposal.organization_id !== params.organizationId ||
+        state.proposal.action_hash !== params.actionHash ||
+        state.proposal.executed_at ||
+        state.proposal.status === "executed"
+      ) {
+        return null;
+      }
+
+      if (state.proposal.status !== "approved" && state.proposal.status !== "allowed") {
+        return null;
+      }
+
+      state.proposal = {
+        ...state.proposal,
+        status: "executed",
+        executed_at: params.executedAt,
+        updated_at: params.executedAt,
+      };
+
+      return { ...state.proposal };
+    },
+    revertExecuted: async (_supabase, params) => {
+      if (
+        state.proposal.status === "executed" &&
+        state.proposal.executed_at === params.executedAt
+      ) {
+        state.proposal = {
+          ...state.proposal,
+          status: params.priorStatus,
+          executed_at: null,
+          updated_at: params.executedAt,
+        };
+      }
+    },
+    revokeActiveTokens: async (_supabase, params) => {
+      for (const token of state.tokens) {
+        if (
+          token.action_proposal_id === params.proposalId &&
+          token.organization_id === params.organizationId &&
+          token.status === "active"
+        ) {
+          token.status = "revoked";
+          token.revoked_at = params.revokedAt;
+          token.updated_at = params.revokedAt;
+        }
+      }
+    },
     generateToken: generateExecutionTokenMaterial,
     hashToken: hashExecutionToken,
     verifyToken: verifyExecutionToken,
     computeHash: computeActionHash,
+    applyReviewTimeout: async (_supabase, proposal) => ({
+      row: proposal,
+      outcome: "none" as const,
+    }),
   };
+}
+
+function createAutoDenyReviewTimeout(state: TokenStoreState) {
+  return async (_supabase: SupabaseClient, proposal: ActionProposalRow) =>
+    applyReviewTimeoutIfExpired(_supabase, proposal, {
+      timeoutBehavior: "auto_deny",
+      deps: {
+        autoDeny: async () => {
+          state.proposal = {
+            ...state.proposal,
+            status: "rejected",
+            decided_at: new Date().toISOString(),
+          };
+          return state.proposal;
+        },
+        insertDecision: async () => {},
+        recordAudit: () => {},
+        getProposal: async () => state.proposal,
+        escalate: async () => null,
+      },
+    });
 }
 
 describe("execution token crypto", () => {
@@ -191,6 +272,16 @@ describe("resolveExternalProposalStatus", () => {
       })
     );
     assert.equal(status, "expired");
+  });
+
+  it("maps executed proposals to executed", () => {
+    const status = resolveExternalProposalStatus(
+      buildProposalRow({
+        status: "executed",
+        executed_at: new Date().toISOString(),
+      })
+    );
+    assert.equal(status, "executed");
   });
 });
 
@@ -241,6 +332,41 @@ describe("getProposalExecutionStatus", () => {
     assert.equal(result.executionToken, undefined);
     assert.equal(state.tokens.length, 0);
   });
+
+  it("auto-denies expired review and never issues a token", async () => {
+    const state: TokenStoreState = {
+      proposal: buildProposalRow({
+        status: "review_required",
+        review_expires_at: new Date(Date.now() - 1_000).toISOString(),
+      }),
+      tokens: [],
+    };
+    const deps = createExecutionDeps(state);
+    deps.applyReviewTimeout = createAutoDenyReviewTimeout(state);
+
+    const result = await getProposalExecutionStatus(
+      {} as SupabaseClient,
+      AUTH_CONTEXT,
+      PROPOSAL_ID,
+      deps
+    );
+
+    assert.equal(result.status, "rejected");
+    assert.equal(state.proposal.status, "rejected");
+    assert.equal(result.executionToken, undefined);
+    assert.equal(state.tokens.length, 0);
+  });
+
+  it("maps review_required past review deadline to pending before timeout processing", () => {
+    const status = resolveExternalProposalStatus(
+      buildProposalRow({
+        status: "review_required",
+        review_expires_at: new Date(Date.now() - 1_000).toISOString(),
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+    );
+    assert.equal(status, "pending");
+  });
 });
 
 describe("verifyProposalExecution", () => {
@@ -281,6 +407,8 @@ describe("verifyProposalExecution", () => {
     assert.equal(result.allowed, true);
     assert.equal(result.actionHash, actionHash);
     assert.equal(state.tokens[0]!.status, "used");
+    assert.equal(state.proposal.status, "executed");
+    assert.ok(state.proposal.executed_at);
   });
 
   it("rejects expired tokens", async () => {
@@ -666,10 +794,133 @@ describe("verifyProposalExecution", () => {
           deps
         ),
       (err: Error & { code?: string }) => {
-        assert.equal(err.code, "replayed");
+        assert.equal(err.code, "not_eligible");
         return true;
       }
     );
+  });
+
+  it("does not issue another token after successful execution", async () => {
+    const material = generateExecutionTokenMaterial();
+    const state: TokenStoreState = {
+      proposal: buildProposalRow({ status: "approved" }),
+      tokens: [
+        {
+          id: "token-1",
+          organization_id: ORG_A,
+          action_proposal_id: PROPOSAL_ID,
+          token_hash: material.tokenHash,
+          token_prefix: material.tokenPrefix,
+          status: "active",
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          used_at: null,
+          revoked_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const deps = createExecutionDeps(state);
+
+    await verifyProposalExecution(
+      {} as SupabaseClient,
+      AUTH_CONTEXT,
+      PROPOSAL_ID,
+      {
+        executionToken: material.plainToken,
+        toolName: validBody.toolName,
+        actionType: validBody.actionType,
+        payload: validPayload,
+      },
+      deps
+    );
+
+    const status = await getProposalExecutionStatus(
+      {} as SupabaseClient,
+      AUTH_CONTEXT,
+      PROPOSAL_ID,
+      deps
+    );
+
+    assert.equal(status.status, "executed");
+    assert.equal(status.executionToken, undefined);
+    assert.equal(status.executionTokenIssued, undefined);
+    assert.equal(state.tokens.filter((token) => token.status === "active").length, 0);
+  });
+
+  it("prevents concurrent verification with a second active token", async () => {
+    const materialOne = generateExecutionTokenMaterial();
+    const materialTwo = generateExecutionTokenMaterial();
+    const state: TokenStoreState = {
+      proposal: buildProposalRow({ status: "approved" }),
+      tokens: [
+        {
+          id: "token-1",
+          organization_id: ORG_A,
+          action_proposal_id: PROPOSAL_ID,
+          token_hash: materialOne.tokenHash,
+          token_prefix: materialOne.tokenPrefix,
+          status: "active",
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          used_at: null,
+          revoked_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: "token-2",
+          organization_id: ORG_A,
+          action_proposal_id: PROPOSAL_ID,
+          token_hash: materialTwo.tokenHash,
+          token_prefix: materialTwo.tokenPrefix,
+          status: "active",
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          used_at: null,
+          revoked_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const deps = createExecutionDeps(state);
+
+    await verifyProposalExecution(
+      {} as SupabaseClient,
+      AUTH_CONTEXT,
+      PROPOSAL_ID,
+      {
+        executionToken: materialOne.plainToken,
+        toolName: validBody.toolName,
+        actionType: validBody.actionType,
+        payload: validPayload,
+      },
+      deps
+    );
+
+    await assert.rejects(
+      () =>
+        verifyProposalExecution(
+          {} as SupabaseClient,
+          AUTH_CONTEXT,
+          PROPOSAL_ID,
+          {
+            executionToken: materialTwo.plainToken,
+            toolName: validBody.toolName,
+            actionType: validBody.actionType,
+            payload: validPayload,
+          },
+          deps
+        ),
+      (err: Error & { code?: string }) => {
+        assert.equal(err.code, "not_eligible");
+        return true;
+      }
+    );
+
+    assert.equal(state.proposal.status, "executed");
+    assert.equal(state.tokens[1]!.status, "revoked");
   });
 });
 

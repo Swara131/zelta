@@ -1,5 +1,6 @@
 import { RUNTIME_EVENT_TITLES } from "@/lib/gateway/audit/mapper";
 import type { AuditTimelineEntry } from "@/lib/audit/types";
+import { isRiskAssessmentRuntimeEvent } from "@/lib/ui/shadow-risk-display";
 
 interface AuditTimelineFeedProps {
   entries: AuditTimelineEntry[];
@@ -22,6 +23,35 @@ function labelForEntry(entry: AuditTimelineEntry): string {
     return entry.runtimeEvent;
   }
   return entry.action;
+}
+
+function riskMetaChips(entry: AuditTimelineEntry): string[] {
+  const meta = entry.metadata ?? {};
+  const chips: string[] = [];
+
+  if (meta.mode === "shadow") {
+    chips.push("Shadow");
+  }
+  if (typeof meta.riskLevel === "string") {
+    chips.push(`Risk ${meta.riskLevel}`);
+  }
+  if (typeof meta.riskScore === "number") {
+    chips.push(`Score ${meta.riskScore}`);
+  }
+  if (typeof meta.shadowRecommendedDecision === "string") {
+    chips.push(`Shadow ${String(meta.shadowRecommendedDecision).toUpperCase()}`);
+  }
+  if (typeof meta.policyDecision === "string") {
+    chips.push(`Gateway ${meta.policyDecision}`);
+  }
+  if (typeof meta.classifierStatus === "string") {
+    chips.push(String(meta.classifierStatus));
+  }
+  if (typeof meta.latencyMs === "number") {
+    chips.push(`${meta.latencyMs}ms`);
+  }
+
+  return chips;
 }
 
 export default function AuditTimelineFeed({ entries }: AuditTimelineFeedProps) {
@@ -71,6 +101,18 @@ export default function AuditTimelineFeed({ entries }: AuditTimelineFeedProps) {
                   )}
                 </div>
                 <p className="mt-0.5 text-sm text-zinc-500">{entry.description}</p>
+                {isRiskAssessmentRuntimeEvent(entry.runtimeEvent) && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {riskMetaChips(entry).map((chip) => (
+                      <span
+                        key={chip}
+                        className="rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-200"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-zinc-600">
                   <span>{entry.actor}</span>
                   <span>

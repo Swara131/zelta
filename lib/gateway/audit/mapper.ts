@@ -1,6 +1,7 @@
 import type { ApprovalStatus } from "@/lib/approval-types";
 import type { AuditTimelineEntry } from "@/lib/audit/types";
 import type { RiskSeverity } from "@/lib/risk-types";
+import { buildAuditRiskAssessmentDescription } from "@/lib/ui/shadow-risk-display";
 import {
   DB_EVENT_TO_RUNTIME,
   type GatewayAuditDbEventType,
@@ -28,6 +29,12 @@ const RUNTIME_EVENT_TITLES: Record<RuntimeAuditEventName, string> = {
   "policy.block": "Policy Blocked",
   "ai.risk_analyzed": "AI Risk Analyzed",
   "ai.risk_failed": "AI Risk Analysis Failed",
+  "shadow.risk_analyzed": "Shadow Risk Analyzed",
+  "shadow.risk_failed": "Shadow Risk Analysis Failed",
+  "risk.assessment_started": "Risk Assessment Started",
+  "risk.assessment_completed": "Risk Assessment Completed",
+  "risk.assessment_failed": "Risk Assessment Failed",
+  "decision.composed": "Decision Composed",
   "approval.approved": "Approval Granted",
   "approval.rejected": "Approval Rejected",
   "token.issued": "Execution Token Issued",
@@ -35,6 +42,13 @@ const RUNTIME_EVENT_TITLES: Record<RuntimeAuditEventName, string> = {
   "token.consumed": "Execution Token Consumed",
   "execution.denied": "Execution Denied",
   "proposal.expired": "Proposal Expired",
+  "review.deadline_set": "Review Deadline Set",
+  "review.expired": "Review Deadline Expired",
+  "review.auto_denied": "Review Auto-Denied",
+  "review.escalated": "Review Escalated",
+  "notification.queued": "Notification Queued",
+  "notification.sent": "Notification Sent",
+  "notification.failed": "Notification Failed",
 };
 
 function normalizeUser(
@@ -56,13 +70,19 @@ function runtimeEventToAuditAction(event: RuntimeAuditEventName): AuditTimelineE
   if (event.startsWith("approval.")) {
     return event === "approval.approved" ? "approve" : "reject";
   }
-  if (event.startsWith("policy.block") || event === "execution.denied") {
+  if (event.startsWith("policy.block") || event === "execution.denied" || event === "review.auto_denied") {
     return "reject";
   }
-  if (event.startsWith("token.") || event.startsWith("proposal.")) {
+  if (
+    event.startsWith("token.") ||
+    event.startsWith("proposal.") ||
+    event.startsWith("decision.") ||
+    event.startsWith("review.deadline") ||
+    event.startsWith("notification.")
+  ) {
     return "create";
   }
-  if (event.startsWith("ai.")) {
+  if (event.startsWith("ai.") || event.startsWith("shadow.") || event.startsWith("risk.")) {
     return "analyze";
   }
   return "update";
@@ -81,6 +101,11 @@ function buildDescription(row: RuntimeAuditEventRow, event: RuntimeAuditEventNam
   const meta = row.metadata ?? {};
   if (typeof meta.description === "string" && meta.description) {
     return meta.description;
+  }
+
+  const riskDescription = buildAuditRiskAssessmentDescription(meta);
+  if (riskDescription) {
+    return riskDescription;
   }
 
   const toolName = typeof meta.toolName === "string" ? meta.toolName : null;

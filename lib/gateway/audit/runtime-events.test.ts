@@ -31,6 +31,12 @@ describe("RUNTIME_EVENT_TO_DB", () => {
       "policy.block",
       "ai.risk_analyzed",
       "ai.risk_failed",
+      "shadow.risk_analyzed",
+      "shadow.risk_failed",
+      "risk.assessment_started",
+      "risk.assessment_completed",
+      "risk.assessment_failed",
+      "decision.composed",
       "approval.approved",
       "approval.rejected",
       "token.issued",
@@ -38,6 +44,13 @@ describe("RUNTIME_EVENT_TO_DB", () => {
       "token.consumed",
       "execution.denied",
       "proposal.expired",
+      "review.deadline_set",
+      "review.expired",
+      "review.auto_denied",
+      "review.escalated",
+      "notification.queued",
+      "notification.sent",
+      "notification.failed",
     ] as const;
 
     for (const event of required) {

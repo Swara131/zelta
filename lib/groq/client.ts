@@ -22,7 +22,7 @@ export function getGroqClient(): Groq {
  */
 export async function groqJsonCompletion(
   prompt: string,
-  options?: { system?: string; kind?: "translation" | "risk" | "proposal" }
+  options?: { system?: string; kind?: "translation" | "risk" | "proposal"; temperature?: number }
 ): Promise<string> {
   const kind = options?.kind ?? "translation";
   const groq = getGroqClient();
@@ -37,7 +37,7 @@ export async function groqJsonCompletion(
     const response = await groq.chat.completions.create({
       model: getGroqModel(),
       messages,
-      temperature: 0.2,
+      temperature: options?.temperature ?? 0.2,
       response_format: { type: "json_object" },
     });
 

@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ProposalError } from "@/lib/gateway/errors";
+import type { StoredShadowRiskRecord } from "@/lib/gateway/risk/shadow-store";
 import type { GatewayProposalStatus } from "./types";
+import type { StoredRiskReasons } from "./enrichment";
+import { extractMatchedPoliciesFromRiskReasons } from "./enrichment";
 
 export type ActionProposalRow = {
   id: string;
@@ -21,12 +24,13 @@ export type ActionProposalRow = {
   created_at: string;
   updated_at: string;
   expires_at: string;
+  review_expires_at: string | null;
   decided_at: string | null;
   executed_at: string | null;
 };
 
 const PROPOSAL_COLUMNS =
-  "id, organization_id, agent_id, tool_name, action_type, action_payload, action_hash, plain_english_summary, risk_level, risk_score, risk_reasons, policy_decision, status, requested_by, idempotency_key, created_at, updated_at, expires_at, decided_at, executed_at";
+  "id, organization_id, agent_id, tool_name, action_type, action_payload, action_hash, plain_english_summary, risk_level, risk_score, risk_reasons, policy_decision, status, requested_by, idempotency_key, created_at, updated_at, expires_at, review_expires_at, decided_at, executed_at";
 
 const ACTIVE_STATUSES: GatewayProposalStatus[] = [
   "pending",
@@ -51,6 +55,29 @@ export async function findActiveProposalByHash(
 
   if (error) {
     throw new ProposalError(error.message);
+  }
+
+  return (data as ActionProposalRow | null) ?? null;
+}
+
+export async function findProposalByIdempotencyKey(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    agentId: string;
+    idempotencyKey: string;
+  }
+): Promise<ActionProposalRow | null> {
+  const { data, error } = await supabase
+    .from("action_proposals")
+    .select(PROPOSAL_COLUMNS)
+    .eq("organization_id", params.organizationId)
+    .eq("agent_id", params.agentId.trim())
+    .eq("idempotency_key", params.idempotencyKey)
+    .maybeSingle();
+
+  if (error) {
+    throw new ProposalError(error.message, "storage_error", error.code);
   }
 
   return (data as ActionProposalRow | null) ?? null;
@@ -88,7 +115,11 @@ export async function insertActionProposal(
     .single();
 
   if (error || !data) {
-    throw new ProposalError(error?.message ?? "Failed to store action proposal.");
+    throw new ProposalError(
+      error?.message ?? "Failed to store action proposal.",
+      "storage_error",
+      error?.code
+    );
   }
 
   return data as ActionProposalRow;
@@ -103,6 +134,7 @@ export async function updateActionProposalPolicyOutcome(
     policyDecision: "allow" | "review" | "block";
     riskReasons: unknown;
     decidedAt: string;
+    reviewExpiresAt?: string | null;
     plainEnglishSummary?: string | null;
     riskLevel?: string;
     riskScore?: number;
@@ -115,6 +147,7 @@ export async function updateActionProposalPolicyOutcome(
       policy_decision: params.policyDecision,
       risk_reasons: params.riskReasons,
       decided_at: params.decidedAt,
+      review_expires_at: params.reviewExpiresAt ?? null,
       plain_english_summary: params.plainEnglishSummary ?? null,
       risk_level: params.riskLevel,
       risk_score: params.riskScore,
@@ -129,6 +162,81 @@ export async function updateActionProposalPolicyOutcome(
   }
 
   return data as ActionProposalRow;
+}
+
+function normalizeStoredRiskReasons(value: unknown): StoredRiskReasons {
+  if (Array.isArray(value)) {
+    return { matchedPolicies: extractMatchedPoliciesFromRiskReasons(value) };
+  }
+
+  if (typeof value === "object" && value !== null && "matchedPolicies" in value) {
+    const record = value as StoredRiskReasons;
+    return {
+      matchedPolicies: extractMatchedPoliciesFromRiskReasons(record),
+      ai: record.ai,
+      shadow: record.shadow,
+      decisionComposition: record.decisionComposition,
+      reviewEscalation: record.reviewEscalation,
+    };
+  }
+
+  return { matchedPolicies: [] };
+}
+
+/**
+ * Merges observational shadow classifier output into risk_reasons.shadow.
+ * Never throws — failures are logged so proposal creation is unaffected.
+ */
+export async function mergeActionProposalShadowRisk(
+  supabase: SupabaseClient,
+  params: {
+    proposalId: string;
+    organizationId: string;
+    actionHash: string;
+    shadow: StoredShadowRiskRecord;
+  }
+): Promise<void> {
+  try {
+    const existing = await getActionProposalById(supabase, {
+      proposalId: params.proposalId,
+      organizationId: params.organizationId,
+    });
+
+    if (!existing) {
+      console.error("[shadow-risk] Proposal not found for shadow merge:", params.proposalId);
+      return;
+    }
+
+    if (existing.action_hash !== params.actionHash) {
+      console.error(
+        "[shadow-risk] action_hash mismatch for proposal:",
+        params.proposalId
+      );
+      return;
+    }
+
+    const riskReasons = normalizeStoredRiskReasons(existing.risk_reasons);
+    const updated: StoredRiskReasons = {
+      ...riskReasons,
+      shadow: params.shadow,
+    };
+
+    const { error } = await supabase
+      .from("action_proposals")
+      .update({ risk_reasons: updated })
+      .eq("id", params.proposalId)
+      .eq("organization_id", params.organizationId)
+      .eq("action_hash", params.actionHash);
+
+    if (error) {
+      console.error("[shadow-risk] Failed to merge shadow record:", error.message);
+    }
+  } catch (err) {
+    console.error(
+      "[shadow-risk] Unexpected merge failure:",
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 
 export async function insertApprovalDecision(
@@ -208,6 +316,7 @@ export async function finalizeHumanProposalDecision(
     actionHash: string;
     status: Extract<GatewayProposalStatus, "approved" | "rejected">;
     decidedAt: string;
+    reviewExpiresAt: string;
   }
 ): Promise<ActionProposalRow> {
   const { data, error } = await supabase
@@ -220,6 +329,7 @@ export async function finalizeHumanProposalDecision(
     .eq("organization_id", params.organizationId)
     .eq("status", "review_required")
     .eq("action_hash", params.actionHash)
+    .gt("review_expires_at", params.decidedAt)
     .select(PROPOSAL_COLUMNS)
     .maybeSingle();
 
@@ -229,11 +339,80 @@ export async function finalizeHumanProposalDecision(
 
   if (!data) {
     throw new ProposalError(
-      "Proposal not found, already decided, or action hash mismatch."
+      "Proposal not found, already decided, review deadline expired, or action hash mismatch."
     );
   }
 
   return data as ActionProposalRow;
+}
+
+/**
+ * Atomically rejects a review_required proposal when its review deadline has passed.
+ */
+export async function autoDenyExpiredReviewAtomically(
+  supabase: SupabaseClient,
+  params: {
+    proposalId: string;
+    organizationId: string;
+    actionHash: string;
+    processedAt: string;
+  }
+): Promise<ActionProposalRow | null> {
+  const { data, error } = await supabase
+    .from("action_proposals")
+    .update({
+      status: "rejected",
+      decided_at: params.processedAt,
+    })
+    .eq("id", params.proposalId)
+    .eq("organization_id", params.organizationId)
+    .eq("status", "review_required")
+    .eq("action_hash", params.actionHash)
+    .lte("review_expires_at", params.processedAt)
+    .select(PROPOSAL_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw new ProposalError(error.message);
+  }
+
+  return (data as ActionProposalRow | null) ?? null;
+}
+
+/**
+ * Atomically extends review deadline and records escalation metadata.
+ */
+export async function escalateExpiredReviewAtomically(
+  supabase: SupabaseClient,
+  params: {
+    proposalId: string;
+    organizationId: string;
+    actionHash: string;
+    priorDeadline: string;
+    processedAt: string;
+    reviewExpiresAt: string;
+    riskReasons: unknown;
+  }
+): Promise<ActionProposalRow | null> {
+  const { data, error } = await supabase
+    .from("action_proposals")
+    .update({
+      review_expires_at: params.reviewExpiresAt,
+      risk_reasons: params.riskReasons,
+    })
+    .eq("id", params.proposalId)
+    .eq("organization_id", params.organizationId)
+    .eq("status", "review_required")
+    .eq("action_hash", params.actionHash)
+    .lte("review_expires_at", params.processedAt)
+    .select(PROPOSAL_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw new ProposalError(error.message);
+  }
+
+  return (data as ActionProposalRow | null) ?? null;
 }
 
 export async function insertGatewayAuditEvent(
@@ -263,6 +442,71 @@ export async function insertGatewayAuditEvent(
     ip_address: params.ipAddress ?? null,
     user_agent: params.userAgent ?? null,
   });
+
+  if (error) {
+    throw new ProposalError(error.message);
+  }
+}
+
+/**
+ * Atomically marks an approved/allowed proposal as executed after verification.
+ * Binds to action_hash so stale rows cannot be marked.
+ */
+export async function markActionProposalExecutedAtomically(
+  supabase: SupabaseClient,
+  params: {
+    proposalId: string;
+    organizationId: string;
+    actionHash: string;
+    executedAt: string;
+  }
+): Promise<ActionProposalRow | null> {
+  const { data, error } = await supabase
+    .from("action_proposals")
+    .update({
+      status: "executed",
+      executed_at: params.executedAt,
+    })
+    .eq("id", params.proposalId)
+    .eq("organization_id", params.organizationId)
+    .eq("action_hash", params.actionHash)
+    .in("status", ["approved", "allowed"])
+    .is("executed_at", null)
+    .select(PROPOSAL_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw new ProposalError(error.message);
+  }
+
+  return (data as ActionProposalRow | null) ?? null;
+}
+
+/**
+ * Reverts a proposal to its pre-execution status when token consumption fails
+ * after the executed mark (rare race with expiry/concurrency).
+ */
+export async function revertActionProposalExecutionAtomically(
+  supabase: SupabaseClient,
+  params: {
+    proposalId: string;
+    organizationId: string;
+    actionHash: string;
+    priorStatus: Extract<GatewayProposalStatus, "approved" | "allowed">;
+    executedAt: string;
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from("action_proposals")
+    .update({
+      status: params.priorStatus,
+      executed_at: null,
+    })
+    .eq("id", params.proposalId)
+    .eq("organization_id", params.organizationId)
+    .eq("action_hash", params.actionHash)
+    .eq("status", "executed")
+    .eq("executed_at", params.executedAt);
 
   if (error) {
     throw new ProposalError(error.message);
@@ -303,6 +547,7 @@ export function mapProposalRow(row: ActionProposalRow) {
     actionHash: row.action_hash,
     status: row.status,
     expiresAt: row.expires_at,
+    reviewExpiresAt: row.review_expires_at,
     createdAt: row.created_at,
   };
 }

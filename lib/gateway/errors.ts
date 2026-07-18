@@ -26,12 +26,18 @@ export class AgentKeyError extends GatewayError {
 }
 
 export class ProposalError extends GatewayError {
-  readonly code: "agent_mismatch" | "storage_error";
+  readonly code: "agent_mismatch" | "storage_error" | "idempotency_conflict";
+  readonly pgCode?: string;
 
-  constructor(message: string, code: ProposalError["code"] = "storage_error") {
+  constructor(
+    message: string,
+    code: ProposalError["code"] = "storage_error",
+    pgCode?: string
+  ) {
     super(message);
     this.name = "ProposalError";
     this.code = code;
+    this.pgCode = pgCode;
   }
 }
 

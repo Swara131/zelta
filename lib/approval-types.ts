@@ -1,4 +1,5 @@
 import type { RiskSeverity } from "./risk-types";
+import type { ShadowRiskDisplayView } from "@/lib/ui/shadow-risk-display";
 
 export type ApprovalPriority = "p1" | "p2" | "p3" | "p4";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requested" | "escalated";
@@ -53,4 +54,8 @@ export interface PendingApproval {
   }>;
   aiRiskReasons?: string[];
   riskScore?: number;
+  /** Authoritative gateway policy decision. */
+  gatewayDecision?: "ALLOW" | "REVIEW" | "BLOCK";
+  /** Observational shadow risk assessment for display. */
+  shadowRisk?: ShadowRiskDisplayView;
 }

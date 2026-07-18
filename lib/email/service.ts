@@ -15,8 +15,11 @@ import {
 } from "./repository";
 import { renderEmailTemplate } from "./templates/render";
 import type { EmailTemplatePayload, EmailTemplateType } from "./types";
+import { buildApprovalsReviewUrl } from "@/lib/gateway/notifications/sanitize";
+import { getAppUrl } from "./env";
 
-async function deliverNotification(
+/** Delivers a queued notification record via Resend (retry-safe). */
+export async function deliverNotification(
   supabase: SupabaseClient,
   notification: NotificationRow
 ): Promise<void> {
@@ -373,7 +376,6 @@ export async function retryFailedNotifications(
   return { attempted: pending.length, succeeded, failed };
 }
 
-/** Gateway REVIEW notification — sent to org reviewers via Resend. */
 export async function notifyGatewayReviewRequiredEmail(
   supabase: SupabaseClient,
   params: {
@@ -388,6 +390,9 @@ export async function notifyGatewayReviewRequiredEmail(
     plainEnglishSummary: string;
     riskLevel: string;
     riskScore: number;
+    riskReasons?: string[];
+    reviewDeadline?: string;
+    approvalsUrl?: string;
   }
 ): Promise<void> {
   const title = `${params.toolName} — ${params.actionType}`;
@@ -408,6 +413,11 @@ export async function notifyGatewayReviewRequiredEmail(
       plainEnglishSummary: params.plainEnglishSummary,
       riskLevel: params.riskLevel,
       riskScore: params.riskScore,
+      riskReasons: params.riskReasons ?? [],
+      reviewDeadline:
+        params.reviewDeadline ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+      approvalsUrl:
+        params.approvalsUrl ?? buildApprovalsReviewUrl(params.proposalId, getAppUrl()),
       recipientName: params.recipientName,
     },
     severity: params.riskLevel as DetectedRisk["severity"],

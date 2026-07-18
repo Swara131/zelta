@@ -86,6 +86,56 @@ export async function getOrgReviewerEmails(
   return [...unique.values()];
 }
 
+export async function findGatewayReviewNotification(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    proposalId: string;
+    recipientEmail: string;
+    templateType?: EmailTemplateType;
+  }
+): Promise<NotificationRow | null> {
+  const templateType = params.templateType ?? "gateway_review_requested";
+
+  const { data: active, error: activeError } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("template_type", templateType)
+    .eq("risk_id", params.proposalId)
+    .eq("recipient_email", params.recipientEmail)
+    .in("delivery_status", ["pending", "delivered", "retrying"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (activeError) {
+    throw new EmailNotificationError(activeError.message);
+  }
+
+  if (active) {
+    return active as NotificationRow;
+  }
+
+  const { data: prior, error: priorError } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("template_type", templateType)
+    .eq("risk_id", params.proposalId)
+    .eq("recipient_email", params.recipientEmail)
+    .in("delivery_status", ["failed", "bounced"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (priorError) {
+    throw new EmailNotificationError(priorError.message);
+  }
+
+  return (prior as NotificationRow | null) ?? null;
+}
+
 export async function createNotificationRecord(
   supabase: SupabaseClient,
   params: {

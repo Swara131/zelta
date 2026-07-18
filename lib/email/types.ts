@@ -51,6 +51,9 @@ export type EmailTemplatePayload = {
     plainEnglishSummary: string;
     riskLevel: string;
     riskScore: number;
+    riskReasons: string[];
+    reviewDeadline: string;
+    approvalsUrl: string;
     recipientName: string;
   };
 };

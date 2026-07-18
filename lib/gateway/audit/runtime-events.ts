@@ -8,13 +8,26 @@ export type RuntimeAuditEventName =
   | "policy.block"
   | "ai.risk_analyzed"
   | "ai.risk_failed"
+  | "shadow.risk_analyzed"
+  | "shadow.risk_failed"
+  | "risk.assessment_started"
+  | "risk.assessment_completed"
+  | "risk.assessment_failed"
+  | "decision.composed"
   | "approval.approved"
   | "approval.rejected"
   | "token.issued"
   | "token.verified"
   | "token.consumed"
   | "execution.denied"
-  | "proposal.expired";
+  | "proposal.expired"
+  | "review.deadline_set"
+  | "review.expired"
+  | "review.auto_denied"
+  | "review.escalated"
+  | "notification.queued"
+  | "notification.sent"
+  | "notification.failed";
 
 export type GatewayAuditDbEventType =
   | "proposal_created"
@@ -45,6 +58,12 @@ export const RUNTIME_EVENT_TO_DB: Record<RuntimeAuditEventName, GatewayAuditDbEv
   "policy.block": "policy_block",
   "ai.risk_analyzed": "ai_risk_analyzed",
   "ai.risk_failed": "ai_risk_failed",
+  "shadow.risk_analyzed": "ai_risk_analyzed",
+  "shadow.risk_failed": "ai_risk_failed",
+  "risk.assessment_started": "risk_scored",
+  "risk.assessment_completed": "ai_risk_analyzed",
+  "risk.assessment_failed": "ai_risk_failed",
+  "decision.composed": "decision_recorded",
   "approval.approved": "approval_approved",
   "approval.rejected": "approval_rejected",
   "token.issued": "token_issued",
@@ -52,6 +71,13 @@ export const RUNTIME_EVENT_TO_DB: Record<RuntimeAuditEventName, GatewayAuditDbEv
   "token.consumed": "token_consumed",
   "execution.denied": "execution_denied",
   "proposal.expired": "proposal_expired",
+  "review.deadline_set": "review_requested",
+  "review.expired": "proposal_expired",
+  "review.auto_denied": "approval_rejected",
+  "review.escalated": "review_requested",
+  "notification.queued": "review_requested",
+  "notification.sent": "decision_recorded",
+  "notification.failed": "ai_risk_failed",
 };
 
 /** Legacy DB enum values mapped to dotted runtime names for timeline display. */

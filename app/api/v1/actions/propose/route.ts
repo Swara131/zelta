@@ -64,8 +64,13 @@ export async function handleProposeActionRequest(
     }
 
     if (err instanceof ProposalError) {
-      const status = err.code === "agent_mismatch" ? 403 : 500;
-      return secureError(err.message, status, { code: err.code });
+      if (err.code === "agent_mismatch") {
+        return secureError(err.message, 403, { code: err.code });
+      }
+      if (err.code === "idempotency_conflict") {
+        return secureError(err.message, 409, { code: err.code });
+      }
+      return secureError(err.message, 500, { code: err.code });
     }
 
     const message =

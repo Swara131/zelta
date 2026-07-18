@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentAuthContext } from "@/lib/gateway/types";
 import { ProposalError } from "@/lib/gateway/errors";
 import { recordRuntimeAuditEventAsync } from "@/lib/gateway/audit/runtime-events";
-import { notifyGatewayReviewRequired } from "@/lib/gateway/notifications/review-email";
+import {
+  buildGatewayReviewNotificationParams,
+  notifyGatewayReviewRequired,
+} from "@/lib/gateway/notifications/review-notification";
 import { evaluatePolicy } from "@/lib/gateway/policy/engine";
 import {
   decisionToProposalStatus,
@@ -14,19 +17,28 @@ import type { RiskSeverity } from "@/lib/risk-types";
 import {
   buildStoredRiskReasons,
   extractMatchedPoliciesFromRiskReasons,
-  resolveFinalDecision,
   safeEnrichProposalAction,
   type EnrichmentOutcome,
 } from "./enrichment";
 import { canonicalizeAction, computeActionHash } from "./canonicalize";
 import {
   findActiveProposalByHash,
+  findProposalByIdempotencyKey,
   insertActionProposal,
   insertApprovalDecision,
   mapProposalRow,
+  mergeActionProposalShadowRisk,
   updateActionProposalPolicyOutcome,
   type ActionProposalRow,
 } from "./repository";
+import { classifyRisk } from "@/lib/gateway/risk/classifier";
+import {
+  composeGatewayDecision,
+  toStoredDecisionComposition,
+} from "@/lib/gateway/risk/decision-composition";
+import { runShadowRiskAnalysisSafely } from "@/lib/gateway/risk/shadow-integration";
+import { computeReviewExpiresAt } from "@/lib/gateway/review/config";
+import { recordReviewDeadlineSet } from "@/lib/gateway/review/timeout";
 import type { ProposeActionInput, ProposeActionResponse } from "./types";
 
 /** Default proposal TTL before automatic expiry (hours). */
@@ -37,20 +49,26 @@ const UUID_PATTERN =
 
 export interface ProposeActionDeps {
   findActiveByHash: typeof findActiveProposalByHash;
+  findByIdempotencyKey: typeof findProposalByIdempotencyKey;
   insertProposal: typeof insertActionProposal;
   updatePolicyOutcome: typeof updateActionProposalPolicyOutcome;
   insertDecision: typeof insertApprovalDecision;
   evaluatePolicyRules: typeof evaluatePolicy;
   enrichProposal: typeof safeEnrichProposalAction;
+  classifyShadowRisk: typeof classifyRisk;
+  mergeProposalShadowRisk: typeof mergeActionProposalShadowRisk;
 }
 
 const defaultDeps: ProposeActionDeps = {
   findActiveByHash: findActiveProposalByHash,
+  findByIdempotencyKey: findProposalByIdempotencyKey,
   insertProposal: insertActionProposal,
   updatePolicyOutcome: updateActionProposalPolicyOutcome,
   insertDecision: insertApprovalDecision,
   evaluatePolicyRules: evaluatePolicy,
   enrichProposal: safeEnrichProposalAction,
+  classifyShadowRisk: classifyRisk,
+  mergeProposalShadowRisk: mergeActionProposalShadowRisk,
 };
 
 function computeExpiresAt(from = new Date()): string {
@@ -123,6 +141,8 @@ async function applyPolicyDecision(
     toolName: string;
     actionType: string;
     payload: Record<string, unknown>;
+    actionHash: string;
+    proposalExpiresAt: string;
   },
   deps: ProposeActionDeps
 ): Promise<{ row: ActionProposalRow; evaluation: ReturnType<typeof evaluatePolicy> }> {
@@ -132,24 +152,59 @@ async function applyPolicyDecision(
     payload: params.payload,
   });
 
-  const finalDecision = resolveFinalDecision(evaluation.decision, { ok: false, error: "" });
-  const decidedAt = new Date().toISOString();
-  const status = decisionToProposalStatus(finalDecision);
-  const dbDecision = policyDecisionToDb(finalDecision);
+  const deterministicDecision = evaluation.decision;
 
   const enrichment: EnrichmentOutcome = await deps.enrichProposal({
     agentId: params.agentId,
     toolName: params.toolName,
     actionType: params.actionType,
     payload: params.payload,
-    policyDecision: finalDecision,
+    policyDecision: deterministicDecision,
     matchedPolicies: evaluation.matchedPolicies,
   });
 
-  const storedRiskReasons = buildStoredRiskReasons(
-    evaluation.matchedPolicies,
-    enrichment
+  const riskAssessment = await runShadowRiskAnalysisSafely(
+    supabase,
+    {
+      organizationId: params.organizationId,
+      proposalId: params.proposalId,
+      actionHash: params.actionHash,
+      agentId: params.agentId,
+      toolName: params.toolName,
+      actionType: params.actionType,
+      payload: params.payload,
+      policyDecision: deterministicDecision,
+      matchedPolicyNames: evaluation.matchedPolicies.map((policy) => policy.name),
+    },
+    {
+      classifyRisk: deps.classifyShadowRisk,
+      mergeShadowRisk: deps.mergeProposalShadowRisk,
+      recordAudit: recordRuntimeAuditEventAsync,
+    }
   );
+
+  const composition = composeGatewayDecision({
+    deterministicDecision,
+    riskAssessment,
+    actionHash: params.actionHash,
+  });
+
+  const finalDecision = composition.finalDecision;
+  const decidedAt = new Date().toISOString();
+  const status = decisionToProposalStatus(finalDecision);
+  const dbDecision = policyDecisionToDb(finalDecision);
+  const reviewExpiresAt =
+    status === "review_required"
+      ? computeReviewExpiresAt({
+          reviewRequestedAt: new Date(decidedAt),
+          proposalExpiresAt: params.proposalExpiresAt,
+        })
+      : null;
+
+  const storedRiskReasons = {
+    ...buildStoredRiskReasons(evaluation.matchedPolicies, enrichment),
+    decisionComposition: toStoredDecisionComposition(composition, params.actionHash, decidedAt),
+  };
 
   const row = await deps.updatePolicyOutcome(supabase, {
     proposalId: params.proposalId,
@@ -158,6 +213,7 @@ async function applyPolicyDecision(
     policyDecision: dbDecision,
     riskReasons: storedRiskReasons,
     decidedAt,
+    reviewExpiresAt,
     plainEnglishSummary: enrichment.ok ? enrichment.data.plainEnglishSummary : null,
     riskLevel: enrichment.ok ? enrichment.data.riskLevel : undefined,
     riskScore: enrichment.ok ? enrichment.data.riskScore : undefined,
@@ -172,6 +228,7 @@ async function applyPolicyDecision(
     reason: evaluation.matchedPolicies.map((policy) => policy.name).join("; ") || null,
     metadata: {
       matchedPolicies: evaluation.matchedPolicies,
+      deterministicDecision: composition.deterministicDecision,
       aiEnrichment: enrichment.ok
         ? {
             riskScore: enrichment.data.riskScore,
@@ -179,6 +236,24 @@ async function applyPolicyDecision(
             model: enrichment.data.model,
           }
         : { failure: storedRiskReasons.ai?.failure ?? null },
+    },
+  });
+
+  recordRuntimeAuditEventAsync(supabase, {
+    organizationId: params.organizationId,
+    proposalId: params.proposalId,
+    event: "decision.composed",
+    agentId: params.agentId,
+    metadata: {
+      actionHash: params.actionHash,
+      deterministicDecision: composition.deterministicDecision,
+      finalDecision: composition.finalDecision,
+      riskRecommendedDecision: composition.riskRecommendedDecision,
+      escalated: composition.escalated,
+      escalationReason: composition.escalationReason,
+      enforcementMode: composition.enforcementMode,
+      failsafeMode: composition.failsafeMode,
+      classifierVersion: composition.classifierVersion,
     },
   });
 
@@ -224,23 +299,102 @@ async function applyPolicyDecision(
     });
   }
 
-  if (status === "review_required") {
-    void notifyGatewayReviewRequired(supabase, {
+  if (status === "review_required" && reviewExpiresAt) {
+    recordReviewDeadlineSet(supabase, {
       organizationId: params.organizationId,
       proposalId: params.proposalId,
       agentId: params.agentId,
+      actionHash: params.actionHash,
+      reviewExpiresAt,
+      decidedAt,
       toolName: params.toolName,
       actionType: params.actionType,
-      plainEnglishSummary:
-        enrichment.ok
-          ? enrichment.data.plainEnglishSummary
-          : "Agent action requires human review before execution.",
-      riskLevel: (enrichment.ok ? enrichment.data.riskLevel : row.risk_level) as RiskSeverity,
-      riskScore: enrichment.ok ? enrichment.data.riskScore : row.risk_score,
     });
   }
 
+  if (row.status === "review_required") {
+    const notificationParams = buildGatewayReviewNotificationParams(row, params.actionHash);
+    if (notificationParams) {
+      void notifyGatewayReviewRequired(supabase, notificationParams);
+    }
+  }
+
   return { row, evaluation };
+}
+
+function normalizeIdempotencyKey(idempotencyKey?: string): string | null {
+  const trimmed = idempotencyKey?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function assertIdempotencyActionMatch(
+  existing: ActionProposalRow,
+  actionHash: string
+): void {
+  if (existing.action_hash !== actionHash) {
+    throw new ProposalError(
+      "Idempotency key was already used with a different action.",
+      "idempotency_conflict"
+    );
+  }
+}
+
+async function resolveExistingProposalResponse(
+  supabase: SupabaseClient,
+  existing: ActionProposalRow,
+  actionHash: string,
+  deps: ProposeActionDeps
+): Promise<ProposeActionResponse> {
+  assertIdempotencyActionMatch(existing, actionHash);
+
+  if (existing.policy_decision) {
+    return toProposeResponse(existing);
+  }
+
+  const { row } = await applyPolicyDecision(
+    supabase,
+    {
+      organizationId: existing.organization_id,
+      proposalId: existing.id,
+      agentId: existing.agent_id,
+      toolName: existing.tool_name,
+      actionType: existing.action_type,
+      payload: existing.action_payload,
+      actionHash,
+      proposalExpiresAt: existing.expires_at,
+    },
+    deps
+  );
+
+  return toProposeResponse(row);
+}
+
+async function resolveExistingProposalByHash(
+  supabase: SupabaseClient,
+  auth: AgentAuthContext,
+  existing: ActionProposalRow,
+  deps: ProposeActionDeps
+): Promise<ProposeActionResponse> {
+  if (existing.policy_decision) {
+    return toProposeResponse(existing);
+  }
+
+  const { row } = await applyPolicyDecision(
+    supabase,
+    {
+      organizationId: auth.organizationId,
+      proposalId: existing.id,
+      agentId: existing.agent_id,
+      toolName: existing.tool_name,
+      actionType: existing.action_type,
+      payload: existing.action_payload,
+      actionHash: existing.action_hash,
+      proposalExpiresAt: existing.expires_at,
+    },
+    deps
+  );
+
+  return toProposeResponse(row);
 }
 
 /**
@@ -271,43 +425,67 @@ export async function proposeAction(
     payload: input.payload,
   });
 
+  const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
+
+  if (idempotencyKey) {
+    const existingByKey = await deps.findByIdempotencyKey(supabase, {
+      organizationId: auth.organizationId,
+      agentId: input.agentId,
+      idempotencyKey,
+    });
+
+    if (existingByKey) {
+      return resolveExistingProposalResponse(
+        supabase,
+        existingByKey,
+        actionHash,
+        deps
+      );
+    }
+  }
+
   const existing = await deps.findActiveByHash(supabase, {
     organizationId: auth.organizationId,
     actionHash,
   });
 
   if (existing) {
-    if (existing.policy_decision) {
-      return toProposeResponse(existing);
-    }
-
-    const { row } = await applyPolicyDecision(
-      supabase,
-      {
-        organizationId: auth.organizationId,
-        proposalId: existing.id,
-        agentId: existing.agent_id,
-        toolName: existing.tool_name,
-        actionType: existing.action_type,
-        payload: existing.action_payload,
-      },
-      deps
-    );
-
-    return toProposeResponse(row);
+    return resolveExistingProposalByHash(supabase, auth, existing, deps);
   }
 
-  const inserted = await deps.insertProposal(supabase, {
-    organizationId: auth.organizationId,
-    agentId: canonical.agentId,
-    toolName: canonical.toolName,
-    actionType: canonical.actionType,
-    actionPayload: canonical.payload as Record<string, unknown>,
-    actionHash,
-    expiresAt: computeExpiresAt(),
-    requestedByUserId: resolveRequestedByUserId(input.requestedBy),
-    idempotencyKey: input.idempotencyKey ?? null,
-  });
+  let inserted: ActionProposalRow;
+
+  try {
+    inserted = await deps.insertProposal(supabase, {
+      organizationId: auth.organizationId,
+      agentId: canonical.agentId,
+      toolName: canonical.toolName,
+      actionType: canonical.actionType,
+      actionPayload: canonical.payload as Record<string, unknown>,
+      actionHash,
+      expiresAt: computeExpiresAt(),
+      requestedByUserId: resolveRequestedByUserId(input.requestedBy),
+      idempotencyKey,
+    });
+  } catch (err) {
+    if (
+      idempotencyKey &&
+      err instanceof ProposalError &&
+      err.pgCode === "23505"
+    ) {
+      const raced = await deps.findByIdempotencyKey(supabase, {
+        organizationId: auth.organizationId,
+        agentId: input.agentId,
+        idempotencyKey,
+      });
+
+      if (raced) {
+        return resolveExistingProposalResponse(supabase, raced, actionHash, deps);
+      }
+    }
+
+    throw err;
+  }
 
   recordRuntimeAuditEventAsync(supabase, {
     organizationId: auth.organizationId,
@@ -330,6 +508,8 @@ export async function proposeAction(
       toolName: canonical.toolName,
       actionType: canonical.actionType,
       payload: canonical.payload as Record<string, unknown>,
+      actionHash,
+      proposalExpiresAt: inserted.expires_at,
     },
     deps
   );

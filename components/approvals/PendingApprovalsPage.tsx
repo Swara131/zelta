@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ClipboardCheck,
   AlertCircle,
@@ -13,8 +14,14 @@ import EmptyState from "@/components/ui/EmptyState";
 import ApprovalCard from "./ApprovalCard";
 import type { ApprovalStatus, PendingApproval } from "@/lib/approval-types";
 import type { RiskSeverity } from "@/lib/risk-types";
+import {
+  findAuthorizedProposalForDeepLink,
+  parseProposalDeepLinkParam,
+  shouldClearFilterForDeepLink,
+  type ProposalDeepLinkFilter,
+} from "@/lib/approvals/proposal-deep-link";
 
-type FilterKey = "all" | RiskSeverity;
+type FilterKey = ProposalDeepLinkFilter;
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -45,12 +52,19 @@ async function fetchPendingApprovals(): Promise<PendingApproval[]> {
 }
 
 export default function PendingApprovalsPage() {
+  const searchParams = useSearchParams();
+  const deepLinkProposalId = parseProposalDeepLinkParam(searchParams.get("proposal"));
+
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [toast, setToast] = useState<Toast | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [highlightedProposalId, setHighlightedProposalId] = useState<string | null>(
+    null
+  );
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +88,39 @@ export default function PendingApprovalsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (loading || !deepLinkProposalId) {
+      return;
+    }
+
+    const match = findAuthorizedProposalForDeepLink(approvals, deepLinkProposalId);
+    if (!match) {
+      return;
+    }
+
+    if (shouldClearFilterForDeepLink(filter, match)) {
+      setFilter("all");
+    }
+
+    setHighlightedProposalId(match.id);
+
+    const scrollTimer = window.setTimeout(() => {
+      const node =
+        cardRefs.current.get(match.id) ??
+        document.querySelector(`[data-proposal-id="${match.id}"]`);
+      node?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+
+    const clearHighlightTimer = window.setTimeout(() => {
+      setHighlightedProposalId(null);
+    }, 8000);
+
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearHighlightTimer);
+    };
+  }, [loading, approvals, deepLinkProposalId, filter]);
 
   const filtered = useMemo(
     () =>
@@ -219,10 +266,14 @@ export default function PendingApprovalsPage() {
             <div
               key={approval.id}
               className={removingId === approval.id ? "approval-card-exit" : ""}
+              ref={(node) => {
+                cardRefs.current.set(approval.id, node);
+              }}
             >
               <ApprovalCard
                 approval={approval}
                 index={index}
+                highlighted={highlightedProposalId === approval.id}
                 onAction={handleAction}
               />
             </div>

@@ -7,7 +7,15 @@ import {
 } from "@/lib/gateway/audit/runtime-events";
 import { computeActionHash } from "@/lib/gateway/proposals/canonicalize";
 import type { ActionProposalRow } from "@/lib/gateway/proposals/repository";
+import {
+  markActionProposalExecutedAtomically,
+  revertActionProposalExecutionAtomically,
+} from "@/lib/gateway/proposals/repository";
 import { assertAgentMatchesAuth } from "@/lib/gateway/proposals/service";
+import {
+  applyReviewTimeoutIfExpired,
+  effectiveReviewDeadline,
+} from "@/lib/gateway/review/timeout";
 import { EXECUTION_TOKEN_TTL_SECONDS } from "./constants";
 import {
   generateExecutionTokenMaterial,
@@ -21,7 +29,9 @@ import {
   getExecutionTokenByHash,
   getProposalForAgentExecution,
   insertExecutionToken,
+  revokeActiveTokensForProposal,
 } from "./repository";
+import type { GatewayProposalStatus } from "@/lib/gateway/proposals/types";
 import type {
   ExternalProposalStatus,
   ProposalStatusResponse,
@@ -35,10 +45,14 @@ export interface ExecutionTokenDeps {
   insertToken: typeof insertExecutionToken;
   getTokenByHash: typeof getExecutionTokenByHash;
   consumeToken: typeof consumeExecutionTokenAtomically;
+  markExecuted: typeof markActionProposalExecutedAtomically;
+  revertExecuted: typeof revertActionProposalExecutionAtomically;
+  revokeActiveTokens: typeof revokeActiveTokensForProposal;
   generateToken: typeof generateExecutionTokenMaterial;
   hashToken: typeof hashExecutionToken;
   verifyToken: typeof verifyExecutionToken;
   computeHash: typeof computeActionHash;
+  applyReviewTimeout: typeof applyReviewTimeoutIfExpired;
 }
 
 const defaultDeps: ExecutionTokenDeps = {
@@ -47,10 +61,14 @@ const defaultDeps: ExecutionTokenDeps = {
   insertToken: insertExecutionToken,
   getTokenByHash: getExecutionTokenByHash,
   consumeToken: consumeExecutionTokenAtomically,
+  markExecuted: markActionProposalExecutedAtomically,
+  revertExecuted: revertActionProposalExecutionAtomically,
+  revokeActiveTokens: revokeActiveTokensForProposal,
   generateToken: generateExecutionTokenMaterial,
   hashToken: hashExecutionToken,
   verifyToken: verifyExecutionToken,
   computeHash: computeActionHash,
+  applyReviewTimeout: applyReviewTimeoutIfExpired,
 };
 
 function computeTokenExpiresAt(from = new Date()): string {
@@ -107,6 +125,10 @@ export function resolveExternalProposalStatus(
   row: ActionProposalRow,
   now = new Date()
 ): ExternalProposalStatus {
+  if (row.status === "executed" || row.executed_at) {
+    return "executed";
+  }
+
   if (row.status === "rejected") {
     return "rejected";
   }
@@ -117,6 +139,13 @@ export function resolveExternalProposalStatus(
 
   if (row.status === "expired") {
     return "expired";
+  }
+
+  if (
+    row.status === "review_required" &&
+    new Date(effectiveReviewDeadline(row)) <= now
+  ) {
+    return "pending";
   }
 
   if (new Date(row.expires_at) <= now) {
@@ -131,10 +160,13 @@ export function resolveExternalProposalStatus(
 }
 
 function isExecutionEligible(row: ActionProposalRow, now = new Date()): boolean {
-  return (
-    resolveExternalProposalStatus(row, now) === "approved" &&
-    row.status !== "executed"
-  );
+  return resolveExternalProposalStatus(row, now) === "approved";
+}
+
+function isExecutableProposalStatus(
+  status: GatewayProposalStatus
+): status is Extract<GatewayProposalStatus, "approved" | "allowed"> {
+  return status === "approved" || status === "allowed";
 }
 
 export async function getProposalExecutionStatus(
@@ -153,34 +185,44 @@ export async function getProposalExecutionStatus(
     throw new ExecutionTokenError("Action proposal not found.", "not_found");
   }
 
-  const status = resolveExternalProposalStatus(proposal);
+  const timeoutResult = await deps.applyReviewTimeout(supabase, proposal);
+  const currentProposal = timeoutResult.row;
+
+  const status = resolveExternalProposalStatus(currentProposal);
   const response: ProposalStatusResponse = {
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     status,
-    actionHash: proposal.action_hash,
+    actionHash: currentProposal.action_hash,
   };
 
   if (status === "expired") {
     recordRuntimeEvent(supabase, {
       organizationId: auth.organizationId,
-      proposalId: proposal.id,
+      proposalId: currentProposal.id,
       event: "proposal.expired",
       agentId: auth.agentId,
       metadata: {
-        toolName: proposal.tool_name,
-        actionType: proposal.action_type,
-        expiresAt: proposal.expires_at,
+        toolName: currentProposal.tool_name,
+        actionType: currentProposal.action_type,
+        expiresAt: currentProposal.expires_at,
       },
     });
     return response;
   }
 
-  if (!isExecutionEligible(proposal)) {
+  if (currentProposal.status === "rejected" && timeoutResult.outcome === "auto_denied") {
+    return {
+      ...response,
+      status: "rejected",
+    };
+  }
+
+  if (!isExecutionEligible(currentProposal)) {
     return response;
   }
 
   const existing = await deps.getActiveToken(supabase, {
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     organizationId: auth.organizationId,
   });
 
@@ -197,7 +239,7 @@ export async function getProposalExecutionStatus(
 
   await deps.insertToken(supabase, {
     organizationId: auth.organizationId,
-    actionProposalId: proposal.id,
+    actionProposalId: currentProposal.id,
     tokenHash: material.tokenHash,
     tokenPrefix: material.tokenPrefix,
     expiresAt,
@@ -205,11 +247,11 @@ export async function getProposalExecutionStatus(
 
   recordRuntimeEvent(supabase, {
     organizationId: auth.organizationId,
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     event: "token.issued",
     agentId: auth.agentId,
     metadata: {
-      actionHash: proposal.action_hash,
+      actionHash: currentProposal.action_hash,
       tokenPrefix: material.tokenPrefix,
       expiresAt,
     },
@@ -246,15 +288,31 @@ export async function verifyProposalExecution(
 
   assertAgentMatchesAuth(auth, proposal.agent_id);
 
+  const timeoutResult = await deps.applyReviewTimeout(supabase, proposal);
+  const currentProposal = timeoutResult.row;
+
   const baseDeny = {
     organizationId: auth.organizationId,
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     agentId: auth.agentId,
     toolName: input.toolName,
     actionType: input.actionType,
   };
 
-  if (resolveExternalProposalStatus(proposal) !== "approved") {
+  if (resolveExternalProposalStatus(currentProposal) !== "approved") {
+    denyExecution(supabase, {
+      ...baseDeny,
+      reason:
+        currentProposal.status === "executed" || currentProposal.executed_at
+          ? "Proposal has already been executed."
+          : currentProposal.status === "rejected"
+            ? "Proposal was rejected and cannot be executed."
+            : "Proposal is not approved for execution.",
+      code: "not_eligible",
+    });
+  }
+
+  if (!isExecutableProposalStatus(currentProposal.status)) {
     denyExecution(supabase, {
       ...baseDeny,
       reason: "Proposal is not approved for execution.",
@@ -262,7 +320,9 @@ export async function verifyProposalExecution(
     });
   }
 
-  if (proposal.tool_name.trim() !== input.toolName.trim()) {
+  const priorStatus = currentProposal.status;
+
+  if (currentProposal.tool_name.trim() !== input.toolName.trim()) {
     denyExecution(supabase, {
       ...baseDeny,
       reason: "toolName does not match the approved action.",
@@ -270,7 +330,7 @@ export async function verifyProposalExecution(
     });
   }
 
-  if (proposal.action_type.trim() !== input.actionType.trim()) {
+  if (currentProposal.action_type.trim() !== input.actionType.trim()) {
     denyExecution(supabase, {
       ...baseDeny,
       reason: "actionType does not match the approved action.",
@@ -280,13 +340,13 @@ export async function verifyProposalExecution(
 
   const recomputedHash = deps.computeHash({
     organizationId: auth.organizationId,
-    agentId: proposal.agent_id,
+    agentId: currentProposal.agent_id,
     toolName: input.toolName,
     actionType: input.actionType,
     payload: input.payload,
   });
 
-  if (recomputedHash !== proposal.action_hash) {
+  if (recomputedHash !== currentProposal.action_hash) {
     denyExecution(supabase, {
       ...baseDeny,
       reason: "Payload does not match the approved action hash.",
@@ -357,11 +417,11 @@ export async function verifyProposalExecution(
 
   recordRuntimeEvent(supabase, {
     organizationId: auth.organizationId,
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     event: "token.verified",
     agentId: auth.agentId,
     metadata: {
-      actionHash: proposal.action_hash,
+      actionHash: currentProposal.action_hash,
       tokenPrefix: stored.token_prefix,
       toolName: input.toolName,
       actionType: input.actionType,
@@ -369,6 +429,22 @@ export async function verifyProposalExecution(
   });
 
   const consumedAt = now.toISOString();
+
+  const executedRow = await deps.markExecuted(supabase, {
+    proposalId: currentProposal.id,
+    organizationId: auth.organizationId,
+    actionHash: currentProposal.action_hash,
+    executedAt: consumedAt,
+  });
+
+  if (!executedRow) {
+    denyExecution(supabase, {
+      ...baseDeny,
+      reason: "Proposal has already been executed.",
+      code: "not_eligible",
+    });
+  }
+
   const consumed = await deps.consumeToken(supabase, {
     tokenHash: stored.token_hash,
     proposalId,
@@ -377,6 +453,13 @@ export async function verifyProposalExecution(
   });
 
   if (!consumed) {
+    await deps.revertExecuted(supabase, {
+      proposalId: currentProposal.id,
+      organizationId: auth.organizationId,
+      actionHash: currentProposal.action_hash,
+      priorStatus,
+      executedAt: consumedAt,
+    });
     denyExecution(supabase, {
       ...baseDeny,
       reason: "Execution token was already consumed or expired.",
@@ -384,13 +467,19 @@ export async function verifyProposalExecution(
     });
   }
 
+  await deps.revokeActiveTokens(supabase, {
+    proposalId: currentProposal.id,
+    organizationId: auth.organizationId,
+    revokedAt: consumedAt,
+  });
+
   recordRuntimeEvent(supabase, {
     organizationId: auth.organizationId,
-    proposalId: proposal.id,
+    proposalId: currentProposal.id,
     event: "token.consumed",
     agentId: auth.agentId,
     metadata: {
-      actionHash: proposal.action_hash,
+      actionHash: currentProposal.action_hash,
       tokenPrefix: stored.token_prefix,
       consumedAt,
     },
@@ -398,8 +487,8 @@ export async function verifyProposalExecution(
 
   return {
     allowed: true,
-    proposalId: proposal.id,
-    actionHash: proposal.action_hash,
+    proposalId: currentProposal.id,
+    actionHash: currentProposal.action_hash,
     consumedAt,
   };
 }

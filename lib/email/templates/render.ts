@@ -3,6 +3,7 @@ import type { EmailTemplatePayload, RenderedEmail } from "../types";
 import {
   detailRow,
   emailLayout,
+  escapeHtml,
   paragraph,
   severityBadge,
 } from "./layout";
@@ -128,18 +129,27 @@ export function renderGatewayReviewRequested(
   data: EmailTemplatePayload["gateway_review_requested"]
 ): RenderedEmail {
   const subject = `[Review Required] ${data.toolName} — ${data.agentId}`;
-  const preview = `${data.riskLevel.toUpperCase()} risk · agent action awaiting approval`;
+  const preview = `${data.riskLevel.toUpperCase()} risk · review by ${new Date(data.reviewDeadline).toLocaleString()}`;
+
+  const reasonsHtml =
+    data.riskReasons.length > 0
+      ? `<ul style="margin:0 0 20px;padding-left:20px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+          ${data.riskReasons.map((reason) => `<li style="margin-bottom:6px;">${escapeHtml(reason)}</li>`).join("")}
+        </ul>`
+      : "";
 
   const bodyHtml = `
     ${paragraph(`Hi ${data.recipientName}, an agent action requires your review before it can proceed.`)}
     <p style="margin:0 0 20px;">${severityBadge(data.riskLevel)}</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
       ${detailRow("Agent", data.agentId)}
-      ${detailRow("Tool", data.toolName)}
       ${detailRow("Action type", data.actionType)}
-      ${detailRow("Risk score", String(data.riskScore))}
+      ${detailRow("Tool", data.toolName)}
+      ${detailRow("Risk level", data.riskLevel.toUpperCase())}
+      ${detailRow("Review deadline", new Date(data.reviewDeadline).toLocaleString())}
     </table>
     ${paragraph(data.plainEnglishSummary)}
+    ${reasonsHtml ? `<p style="margin:0 0 8px;font-size:13px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Risk signals</p>${reasonsHtml}` : ""}
   `;
 
   const html = emailLayout({
@@ -147,7 +157,7 @@ export function renderGatewayReviewRequested(
     title: "Gateway Review Required",
     bodyHtml,
     ctaLabel: "Review in ApprovalLayer",
-    ctaHref: `${getAppUrl()}/approvals`,
+    ctaHref: data.approvalsUrl,
     accentColor: "#6366f1",
   });
 
