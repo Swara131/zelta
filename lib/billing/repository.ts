@@ -17,6 +17,8 @@ export type SubscriptionRow = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
+  paypal_subscription_id: string | null;
+  paypal_plan_id: string | null;
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
@@ -96,6 +98,23 @@ export async function getSubscriptionByStripeSubscriptionId(
   return (data as SubscriptionRow | null) ?? null;
 }
 
+export async function getSubscriptionByPayPalSubscriptionId(
+  supabase: SupabaseClient,
+  subscriptionId: string
+): Promise<SubscriptionRow | null> {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("paypal_subscription_id", subscriptionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new BillingError(error.message);
+  }
+
+  return (data as SubscriptionRow | null) ?? null;
+}
+
 export async function upsertOrgSubscription(
   supabase: SupabaseClient,
   organizationId: string,
@@ -108,6 +127,8 @@ export async function upsertOrgSubscription(
       | "stripe_customer_id"
       | "stripe_subscription_id"
       | "stripe_price_id"
+      | "paypal_subscription_id"
+      | "paypal_plan_id"
       | "current_period_start"
       | "current_period_end"
       | "cancel_at_period_end"

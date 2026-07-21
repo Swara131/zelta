@@ -157,6 +157,8 @@ export async function resetOrgToFreePlan(
     billing_interval: "monthly",
     stripe_subscription_id: null,
     stripe_price_id: null,
+    paypal_subscription_id: null,
+    paypal_plan_id: null,
     cancel_at_period_end: false,
     canceled_at: new Date().toISOString(),
     current_period_start: null,

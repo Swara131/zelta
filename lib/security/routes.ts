@@ -1,5 +1,8 @@
 /** Public API routes that skip session auth (use their own verification). */
-export const PUBLIC_API_PREFIXES = ["/api/webhooks/"] as const;
+export const PUBLIC_API_PREFIXES = [
+  "/api/webhooks/",
+  "/api/paypal/webhook",
+] as const;
 
 /** External agent gateway routes — authenticate via agent API key in route handler. */
 export const GATEWAY_AGENT_API_PREFIXES = ["/api/v1/"] as const;

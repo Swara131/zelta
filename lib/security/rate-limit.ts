@@ -70,7 +70,10 @@ export function rateLimitKey(ip: string, route: string): string {
 }
 
 export function getRateLimitForPath(pathname: string): number {
-  if (pathname.startsWith("/api/webhooks/")) {
+  if (
+    pathname.startsWith("/api/webhooks/") ||
+    pathname.startsWith("/api/paypal/")
+  ) {
     return RATE_LIMIT_WEBHOOK_MAX;
   }
   if (
