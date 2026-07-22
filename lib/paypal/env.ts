@@ -44,7 +44,6 @@ export function getPayPalApiBaseUrl(): string {
     : "https://api-m.paypal.com";
 }
 
-/** Maps configured PayPal plan IDs back to internal plan + interval. */
 export function resolvePlanFromPayPalPlan(planId: string): {
   planId: PlanId;
   interval: BillingInterval;
@@ -68,4 +67,35 @@ export function resolvePlanFromPayPalPlan(planId: string): {
   }
 
   return null;
+}
+
+export function getPayPalPlanId(interval: BillingInterval): string {
+  const key =
+    interval === "monthly"
+      ? "PAYPAL_PLAN_PROFESSIONAL_MONTHLY"
+      : "PAYPAL_PLAN_PROFESSIONAL_YEARLY";
+  return requireEnv(key);
+}
+
+export function getPayPalPlanIdOptional(
+  interval: BillingInterval
+): string | undefined {
+  return interval === "monthly"
+    ? optionalEnv("PAYPAL_PLAN_PROFESSIONAL_MONTHLY")
+    : optionalEnv("PAYPAL_PLAN_PROFESSIONAL_YEARLY");
+}
+
+export function isPayPalCheckoutConfigured(
+  interval?: BillingInterval
+): boolean {
+  if (!optionalEnv("PAYPAL_CLIENT_ID") || !optionalEnv("PAYPAL_CLIENT_SECRET")) {
+    return false;
+  }
+  if (interval) {
+    return !!getPayPalPlanIdOptional(interval);
+  }
+  return (
+    !!optionalEnv("PAYPAL_PLAN_PROFESSIONAL_MONTHLY") &&
+    !!optionalEnv("PAYPAL_PLAN_PROFESSIONAL_YEARLY")
+  );
 }

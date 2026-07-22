@@ -62,3 +62,26 @@ export function resolvePlanFromStripePrice(priceId: string): {
 
   return null;
 }
+
+export function isStripeCheckoutConfigured(interval?: BillingInterval): boolean {
+  const secretKey = optionalEnv("STRIPE_SECRET_KEY");
+  if (!secretKey || !/^sk_(test|live)_/.test(secretKey)) {
+    return false;
+  }
+
+  const monthly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_MONTHLY");
+  const yearly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_YEARLY");
+  if (interval === "monthly") {
+    return !!monthly && monthly.startsWith("price_");
+  }
+  if (interval === "yearly") {
+    return !!yearly && yearly.startsWith("price_");
+  }
+
+  return (
+    !!monthly &&
+    monthly.startsWith("price_") &&
+    !!yearly &&
+    yearly.startsWith("price_")
+  );
+}
