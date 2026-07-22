@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingInterval } from "@/lib/billing-types";
 import { ensureOrganization } from "@/lib/organizations/ensure-organization";
 import { getAppUrl } from "@/lib/billing/env";
 import { BillingError } from "@/lib/billing/errors";
 import { paypalApiRequest } from "./client";
-import { getPayPalPlanId } from "./env";
+import { getPayPalEnvironment, getPayPalPlanId } from "./env";
 
 type PayPalSubscriptionLink = {
   href: string;
@@ -17,6 +18,16 @@ type PayPalSubscriptionCreateResponse = {
   status: string;
   links?: PayPalSubscriptionLink[];
 };
+
+function buildBillingReturnUrl(
+  appUrl: string,
+  outcome: "success" | "canceled"
+): string {
+  const url = new URL("/billing", appUrl);
+  url.searchParams.set("checkout", outcome);
+  url.searchParams.set("provider", "paypal");
+  return url.toString();
+}
 
 export async function createPayPalCheckoutSession(
   supabase: SupabaseClient,
@@ -34,28 +45,39 @@ export async function createPayPalCheckoutSession(
 
   const planId = getPayPalPlanId(params.interval);
   const appUrl = getAppUrl();
+  const environment = getPayPalEnvironment();
+
+  if (environment === "live" && !appUrl.startsWith("https://")) {
+    throw new BillingError(
+      "PayPal live checkout requires HTTPS return URLs. Set APP_URL=https://zelta-production.up.railway.app on Railway."
+    );
+  }
+
+  const email = params.userEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new BillingError("A valid account email is required for PayPal checkout.");
+  }
 
   const subscription = await paypalApiRequest<PayPalSubscriptionCreateResponse>(
     "/v1/billing/subscriptions",
     {
       method: "POST",
+      headers: {
+        "PayPal-Request-Id": randomUUID(),
+      },
       body: JSON.stringify({
         plan_id: planId,
-        custom_id: organizationId,
+        custom_id: organizationId.slice(0, 127),
         subscriber: {
-          email_address: params.userEmail,
+          email_address: email,
         },
         application_context: {
           brand_name: "Zelta",
           locale: "en-US",
           shipping_preference: "NO_SHIPPING",
           user_action: "SUBSCRIBE_NOW",
-          payment_method: {
-            payer_selected: "PAYPAL",
-            payee_preferred: "IMMEDIATE_PAYMENT_REQUIRED",
-          },
-          return_url: `${appUrl}/billing?checkout=success&provider=paypal`,
-          cancel_url: `${appUrl}/billing?checkout=canceled&provider=paypal`,
+          return_url: buildBillingReturnUrl(appUrl, "success"),
+          cancel_url: buildBillingReturnUrl(appUrl, "canceled"),
         },
       }),
     }

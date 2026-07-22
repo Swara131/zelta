@@ -54,16 +54,27 @@ function parsePayPalError(body: string, status: number): string {
   try {
     const json = JSON.parse(body) as {
       message?: string;
-      details?: Array<{ issue?: string; description?: string }>;
+      details?: Array<{
+        field?: string;
+        issue?: string;
+        description?: string;
+      }>;
     };
-    const detail =
-      json.details?.[0]?.description ??
-      json.details?.[0]?.issue ??
-      json.message;
-    if (detail) return detail;
+
+    if (json.details?.length) {
+      return json.details
+        .map((detail) => {
+          const text = detail.description ?? detail.issue ?? "Invalid value";
+          return detail.field ? `${text} (${detail.field})` : text;
+        })
+        .join("; ");
+    }
+
+    if (json.message) return json.message;
   } catch {
     /* fall through */
   }
+
   return `PayPal request failed (${status}). Check plan IDs and PAYPAL_ENVIRONMENT match your credentials.`;
 }
 

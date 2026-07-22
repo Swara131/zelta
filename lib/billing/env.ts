@@ -25,14 +25,13 @@ export function getStripeWebhookSecret(): string {
 export function getAppUrl(): string {
   const normalize = (url: string) => url.replace(/\/$/, "");
 
-  const appUrl = optionalEnv("APP_URL") ?? optionalEnv("NEXT_PUBLIC_APP_URL");
-  if (appUrl && !appUrl.includes("localhost")) {
-    return normalize(appUrl);
-  }
-
   const railwayStaticUrl = optionalEnv("RAILWAY_STATIC_URL");
   if (railwayStaticUrl) {
-    return normalize(railwayStaticUrl);
+    return normalize(
+      railwayStaticUrl.startsWith("http")
+        ? railwayStaticUrl
+        : `https://${railwayStaticUrl}`
+    );
   }
 
   const railwayDomain = optionalEnv("RAILWAY_PUBLIC_DOMAIN");
@@ -40,7 +39,12 @@ export function getAppUrl(): string {
     return normalize(`https://${railwayDomain}`);
   }
 
-  return normalize(appUrl ?? "http://localhost:3000");
+  const appUrl = optionalEnv("APP_URL") ?? optionalEnv("NEXT_PUBLIC_APP_URL");
+  if (appUrl) {
+    return normalize(appUrl);
+  }
+
+  return "http://localhost:3000";
 }
 
 export function getStripePriceId(
