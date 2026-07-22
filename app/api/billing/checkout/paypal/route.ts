@@ -28,6 +28,13 @@ export async function POST(request: Request) {
     }
   }
 
+  if (!user.email?.trim()) {
+    return secureError(
+      "Your account needs an email address before subscribing with PayPal.",
+      400
+    );
+  }
+
   if (!isPayPalCheckoutConfigured(interval)) {
     return secureError(
       "PayPal checkout is not configured for this billing interval.",
@@ -38,14 +45,19 @@ export async function POST(request: Request) {
   try {
     const url = await createPayPalCheckoutSession(supabase, {
       userId: user.id,
-      userEmail: user.email ?? "user@local",
+      userEmail: user.email.trim(),
       interval,
     });
 
     return secureJson({ url, provider: "paypal" });
   } catch (err) {
     const message =
-      err instanceof BillingError ? err.message : "Failed to create PayPal checkout.";
+      err instanceof BillingError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Failed to create PayPal checkout.";
+    console.error("[paypal checkout]", err);
     return secureError(message, 500);
   }
 }

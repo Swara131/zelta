@@ -3,6 +3,7 @@ import {
   getPayPalClientId,
   getPayPalClientSecret,
 } from "./env";
+import { BillingError } from "@/lib/billing/errors";
 import type { PayPalSubscriptionResource } from "./types";
 
 type CachedToken = {
@@ -33,7 +34,7 @@ async function fetchAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`PayPal OAuth failed (${response.status}): ${body}`);
+    throw new BillingError(`PayPal authentication failed (${response.status}).`);
   }
 
   const payload = (await response.json()) as {
@@ -47,6 +48,23 @@ async function fetchAccessToken(): Promise<string> {
   };
 
   return payload.access_token;
+}
+
+function parsePayPalError(body: string, status: number): string {
+  try {
+    const json = JSON.parse(body) as {
+      message?: string;
+      details?: Array<{ issue?: string; description?: string }>;
+    };
+    const detail =
+      json.details?.[0]?.description ??
+      json.details?.[0]?.issue ??
+      json.message;
+    if (detail) return detail;
+  } catch {
+    /* fall through */
+  }
+  return `PayPal request failed (${status}). Check plan IDs and PAYPAL_ENVIRONMENT match your credentials.`;
 }
 
 export async function paypalApiRequest<T>(
@@ -65,7 +83,7 @@ export async function paypalApiRequest<T>(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`PayPal API ${path} failed (${response.status}): ${body}`);
+    throw new BillingError(parsePayPalError(body, response.status));
   }
 
   if (response.status === 204) {
