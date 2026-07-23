@@ -3,13 +3,13 @@ import type { BillingInterval, PlanId, UsageMetric } from "@/lib/billing-types";
 export const PLAN_RANK: Record<PlanId, number> = {
   free: 0,
   professional: 1,
-  enterprise: 2,
+  team: 2,
 };
 
 export const PLAN_LABELS: Record<PlanId, string> = {
   free: "Free",
   professional: "Professional",
-  enterprise: "Enterprise",
+  team: "Team",
 };
 
 export type PremiumFeature =
@@ -37,7 +37,7 @@ export const PLAN_FEATURES: Record<
     auditTimeline: true,
     integrations: false,
   },
-  enterprise: {
+  team: {
     translator: true,
     advancedRisk: true,
     analytics: true,
@@ -55,7 +55,7 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   free: { apiCalls: 1_000, storageMb: 500, users: 3 },
   professional: { apiCalls: 50_000, storageMb: 25_000, users: 25 },
-  enterprise: { apiCalls: 999_999_999, storageMb: 999_999_999, users: 999_999 },
+  team: { apiCalls: 250_000, storageMb: 100_000, users: 100 },
 };
 
 export function hasMinimumPlan(current: PlanId, required: PlanId): boolean {
@@ -72,11 +72,16 @@ export function buildUsageMetrics(
 ): UsageMetric[] {
   const limits = PLAN_LIMITS[plan];
 
-  if (plan === "enterprise") {
+  if (plan === "team") {
     return [
-      { label: "API Calls", used: used.apiCalls, limit: 999_999, unit: "calls" },
-      { label: "Storage", used: used.storageMb / 1024, limit: 999_999, unit: "GB" },
-      { label: "Users", used: used.users, limit: 999_999, unit: "seats" },
+      { label: "API Calls", used: used.apiCalls, limit: limits.apiCalls, unit: "calls" },
+      {
+        label: "Storage",
+        used: Math.round((used.storageMb / 1024) * 10) / 10,
+        limit: limits.storageMb / 1024,
+        unit: "GB",
+      },
+      { label: "Users", used: used.users, limit: limits.users, unit: "seats" },
     ];
   }
 

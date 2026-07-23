@@ -1,4 +1,5 @@
 import type { BillingInterval, PlanId } from "@/lib/billing-types";
+import type { PaidPlanId } from "./pricing";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -47,15 +48,22 @@ export function getAppUrl(): string {
   return "http://localhost:3000";
 }
 
+function stripePriceEnvKey(planId: PaidPlanId, interval: BillingInterval): string {
+  if (planId === "team") {
+    return interval === "monthly"
+      ? "STRIPE_PRICE_TEAM_MONTHLY"
+      : "STRIPE_PRICE_TEAM_YEARLY";
+  }
+  return interval === "monthly"
+    ? "STRIPE_PRICE_PROFESSIONAL_MONTHLY"
+    : "STRIPE_PRICE_PROFESSIONAL_YEARLY";
+}
+
 export function getStripePriceId(
-  planId: Extract<PlanId, "professional">,
+  planId: PaidPlanId,
   interval: BillingInterval
 ): string {
-  const key =
-    interval === "monthly"
-      ? "STRIPE_PRICE_PROFESSIONAL_MONTHLY"
-      : "STRIPE_PRICE_PROFESSIONAL_YEARLY";
-  return requireEnv(key);
+  return requireEnv(stripePriceEnvKey(planId, interval));
 }
 
 /** Maps configured Stripe price IDs back to internal plan + interval. */
@@ -63,46 +71,38 @@ export function resolvePlanFromStripePrice(priceId: string): {
   planId: PlanId;
   interval: BillingInterval;
 } | null {
-  const monthly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_MONTHLY");
-  const yearly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_YEARLY");
-  const enterpriseMonthly = optionalEnv("STRIPE_PRICE_ENTERPRISE_MONTHLY");
-  const enterpriseYearly = optionalEnv("STRIPE_PRICE_ENTERPRISE_YEARLY");
+  const professionalMonthly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_MONTHLY");
+  const professionalYearly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_YEARLY");
+  const teamMonthly = optionalEnv("STRIPE_PRICE_TEAM_MONTHLY");
+  const teamYearly = optionalEnv("STRIPE_PRICE_TEAM_YEARLY");
+  const legacyEnterpriseMonthly = optionalEnv("STRIPE_PRICE_ENTERPRISE_MONTHLY");
+  const legacyEnterpriseYearly = optionalEnv("STRIPE_PRICE_ENTERPRISE_YEARLY");
 
-  if (priceId === monthly) {
+  if (priceId === professionalMonthly) {
     return { planId: "professional", interval: "monthly" };
   }
-  if (priceId === yearly) {
+  if (priceId === professionalYearly) {
     return { planId: "professional", interval: "yearly" };
   }
-  if (priceId === enterpriseMonthly) {
-    return { planId: "enterprise", interval: "monthly" };
+  if (priceId === teamMonthly || priceId === legacyEnterpriseMonthly) {
+    return { planId: "team", interval: "monthly" };
   }
-  if (priceId === enterpriseYearly) {
-    return { planId: "enterprise", interval: "yearly" };
+  if (priceId === teamYearly || priceId === legacyEnterpriseYearly) {
+    return { planId: "team", interval: "yearly" };
   }
 
   return null;
 }
 
-export function isStripeCheckoutConfigured(interval?: BillingInterval): boolean {
+export function isStripeCheckoutConfigured(
+  planId: PaidPlanId,
+  interval: BillingInterval
+): boolean {
   const secretKey = optionalEnv("STRIPE_SECRET_KEY");
   if (!secretKey || !/^sk_(test|live)_/.test(secretKey)) {
     return false;
   }
 
-  const monthly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_MONTHLY");
-  const yearly = optionalEnv("STRIPE_PRICE_PROFESSIONAL_YEARLY");
-  if (interval === "monthly") {
-    return !!monthly && monthly.startsWith("price_");
-  }
-  if (interval === "yearly") {
-    return !!yearly && yearly.startsWith("price_");
-  }
-
-  return (
-    !!monthly &&
-    monthly.startsWith("price_") &&
-    !!yearly &&
-    yearly.startsWith("price_")
-  );
+  const priceId = optionalEnv(stripePriceEnvKey(planId, interval));
+  return !!priceId && priceId.startsWith("price_");
 }

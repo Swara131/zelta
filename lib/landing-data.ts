@@ -139,6 +139,6 @@ export const FAQ_ITEMS = [
   },
   {
     q: "Do you offer self-hosted deployment?",
-    a: "Enterprise plans include dedicated deployment options. Contact sales for architecture review and air-gapped requirements.",
+    a: "Team plans include dedicated deployment options. Contact us for architecture review and air-gapped requirements.",
   },
 ];

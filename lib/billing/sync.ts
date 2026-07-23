@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import type { BillingInterval, PlanId } from "@/lib/billing-types";
 import { resolvePlanFromStripePrice } from "./env";
 import { BillingError } from "./errors";
-import { PLAN_LABELS } from "./plans";
+import { isStoredPlanId, normalizePlanId } from "./normalize-plan";
 import {
   getSubscriptionByStripeCustomerId,
   getSubscriptionByStripeSubscriptionId,
@@ -47,10 +47,10 @@ function planFromSubscription(
     }
   }
 
-  if (metadataPlan && metadataPlan in PLAN_LABELS) {
+  if (metadataPlan && isStoredPlanId(metadataPlan)) {
     const interval =
       (subscription.metadata.interval as BillingInterval | undefined) ?? "monthly";
-    return { plan: metadataPlan, interval };
+    return { plan: normalizePlanId(metadataPlan), interval };
   }
 
   return { plan: "professional", interval: "monthly" };

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingData, BillingInterval, Invoice, PlanId } from "@/lib/billing-types";
+import type { PaidPlanId } from "./pricing";
 import { ensureOrganization } from "@/lib/organizations/ensure-organization";
 import { getAppUrl, getStripePriceId } from "./env";
 import { BillingError } from "./errors";
@@ -146,7 +147,7 @@ export async function createCheckoutSession(
     userId: string;
     userEmail: string;
     userName?: string | null;
-    planId: Extract<PlanId, "professional">;
+    planId: PaidPlanId;
     interval: BillingInterval;
   }
 ): Promise<string> {
@@ -171,7 +172,7 @@ export async function createCheckoutSession(
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${appUrl}/billing?checkout=success`,
+    success_url: `${appUrl}/billing?checkout=success&plan=${params.planId}`,
     cancel_url: `${appUrl}/billing?checkout=canceled`,
     metadata: {
       organizationId,

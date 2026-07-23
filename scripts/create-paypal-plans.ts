@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Create the Zelta Professional PayPal product and monthly/yearly plans.
+ * Create Zelta PayPal products and subscription plans (Professional + Team).
  *
  * Requires in .env.local (or environment):
  *   PAYPAL_CLIENT_ID
@@ -11,6 +11,8 @@
  *   PAYPAL_PRODUCT_ID
  *   PAYPAL_PLAN_PROFESSIONAL_MONTHLY
  *   PAYPAL_PLAN_PROFESSIONAL_YEARLY
+ *   PAYPAL_PLAN_TEAM_MONTHLY
+ *   PAYPAL_PLAN_TEAM_YEARLY
  *
  * Usage:
  *   npm run paypal:create-plans
@@ -19,6 +21,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { PLAN_PRICES, formatPayPalPrice } from "@/lib/billing/pricing";
 
 function loadEnvFile(filename: string): void {
   const path = resolve(process.cwd(), filename);
@@ -88,22 +91,36 @@ assertPayPalEnv();
 type PayPalProduct = { id: string; name: string };
 type PayPalPlan = { id: string; name: string; status?: string };
 
-const PRODUCT_NAME = "Zelta Professional";
+const PRODUCT_NAME = "Zelta";
 
 const PLANS = [
   {
     name: "Professional Monthly",
-    description: "Zelta Professional — $49 USD, billed every month",
-    price: "49.00",
+    description: `Zelta Professional — $${PLAN_PRICES.professional.monthly} USD, billed every month`,
+    price: formatPayPalPrice(PLAN_PRICES.professional.monthly),
     intervalUnit: "MONTH" as const,
     envKey: "PAYPAL_PLAN_PROFESSIONAL_MONTHLY",
   },
   {
     name: "Professional Yearly",
-    description: "Zelta Professional — $490 USD, billed every year",
-    price: "490.00",
+    description: `Zelta Professional — $${PLAN_PRICES.professional.yearly} USD, billed every year`,
+    price: formatPayPalPrice(PLAN_PRICES.professional.yearly),
     intervalUnit: "YEAR" as const,
     envKey: "PAYPAL_PLAN_PROFESSIONAL_YEARLY",
+  },
+  {
+    name: "Team Monthly",
+    description: `Zelta Team — $${PLAN_PRICES.team.monthly} USD, billed every month`,
+    price: formatPayPalPrice(PLAN_PRICES.team.monthly),
+    intervalUnit: "MONTH" as const,
+    envKey: "PAYPAL_PLAN_TEAM_MONTHLY",
+  },
+  {
+    name: "Team Yearly",
+    description: `Zelta Team — $${PLAN_PRICES.team.yearly} USD, billed every year`,
+    price: formatPayPalPrice(PLAN_PRICES.team.yearly),
+    intervalUnit: "YEAR" as const,
+    envKey: "PAYPAL_PLAN_TEAM_YEARLY",
   },
 ] as const;
 
@@ -124,7 +141,7 @@ async function main(): Promise<void> {
     },
     body: JSON.stringify({
       name: PRODUCT_NAME,
-      description: "Zelta Professional subscription for ApprovalLayer",
+      description: "Zelta subscription plans for AI agent approval workflows",
       type: "SERVICE",
       category: "SOFTWARE",
     }),

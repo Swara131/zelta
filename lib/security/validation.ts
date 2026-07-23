@@ -25,7 +25,7 @@ export const translatorPostSchema = z
   );
 
 export const billingCheckoutSchema = z.object({
-  planId: z.enum(["professional"]).default("professional"),
+  planId: z.enum(["professional", "team"]).default("professional"),
   interval: z.enum(["monthly", "yearly"]).default("monthly"),
 });
 

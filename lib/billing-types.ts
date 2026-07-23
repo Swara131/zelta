@@ -1,5 +1,5 @@
 export type BillingInterval = "monthly" | "yearly";
-export type PlanId = "free" | "professional" | "enterprise";
+export type PlanId = "free" | "professional" | "team";
 
 export interface PlanFeature {
   text: string;
@@ -36,7 +36,7 @@ export interface Invoice {
 
 export interface BillingData {
   currentPlan: PlanId;
-  /** True when DEMO_MODE=true; feature checks use Enterprise access without changing stored plan. */
+  /** True when DEMO_MODE=true; feature checks use Team access without changing stored plan. */
   demoMode: boolean;
   interval: BillingInterval;
   usage: UsageMetric[];

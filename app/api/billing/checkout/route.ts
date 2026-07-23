@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { BillingError } from "@/lib/billing/errors";
+import { isPaidPlanId, type PaidPlanId } from "@/lib/billing/pricing";
 import { createCheckoutSession } from "@/lib/billing/service";
 import { parseJsonBody, secureError, secureJson } from "@/lib/security/api";
 import { ValidationError } from "@/lib/security/errors";
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let planId = "professional" as const;
+  let planId: PaidPlanId = "professional";
   let interval: "monthly" | "yearly" = "monthly";
 
   try {
@@ -30,11 +31,8 @@ export async function POST(request: Request) {
     /* defaults */
   }
 
-  if (planId !== "professional") {
-    return secureError(
-      "Only the Professional plan is available for self-serve checkout.",
-      400
-    );
+  if (!isPaidPlanId(planId)) {
+    return secureError("Invalid plan for checkout.", 400);
   }
 
   try {
@@ -42,7 +40,7 @@ export async function POST(request: Request) {
       userId: user.id,
       userEmail: user.email ?? "user@local",
       userName: user.user_metadata?.full_name ?? null,
-      planId: "professional",
+      planId,
       interval,
     });
 

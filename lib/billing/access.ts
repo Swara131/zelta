@@ -6,7 +6,7 @@ import {
   type PremiumFeature,
 } from "./plans";
 
-export const DEMO_ACCESS_PLAN: PlanId = "enterprise";
+export const DEMO_ACCESS_PLAN: PlanId = "team";
 
 function resolveDemoMode(explicit?: boolean): boolean {
   if (explicit !== undefined) {
@@ -51,5 +51,5 @@ export function shouldEnforceUsageLimits(demoMode?: boolean): boolean {
 }
 
 export function requiredPlanForFeature(feature: PremiumFeature): PlanId {
-  return feature === "integrations" ? "enterprise" : "professional";
+  return feature === "integrations" ? "team" : "professional";
 }

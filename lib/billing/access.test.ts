@@ -53,12 +53,12 @@ describe("feature access helper", () => {
     assert.equal(effectiveAccessPlan("free"), "free");
   });
 
-  it("grants enterprise access when demo mode is on", () => {
+  it("grants team access when demo mode is on", () => {
     process.env.DEMO_MODE = "true";
-    assert.equal(effectiveAccessPlan("free"), "enterprise");
+    assert.equal(effectiveAccessPlan("free"), "team");
     assert.equal(canAccessFeature("free", "translator"), true);
     assert.equal(canAccessFeature("free", "integrations"), true);
-    assert.equal(canAccessMinimumPlan("free", "enterprise"), true);
+    assert.equal(canAccessMinimumPlan("free", "team"), true);
     assert.equal(shouldEnforceUsageLimits(), false);
     assert.equal(isWithinLimit("free", "apiCalls", 999_999, 1), true);
   });

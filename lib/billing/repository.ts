@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingInterval, PlanId } from "@/lib/billing-types";
+import { normalizePlanId, type StoredPlanId } from "./normalize-plan";
 import { BillingError } from "./errors";
 
 export type SubscriptionRow = {
@@ -39,7 +40,7 @@ export function effectivePlan(row: SubscriptionRow | null): PlanId {
   if (!row || !isSubscriptionEntitled(row)) {
     return "free";
   }
-  return row.plan;
+  return normalizePlanId(row.plan as StoredPlanId);
 }
 
 export async function getOrgSubscription(

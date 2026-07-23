@@ -1,4 +1,6 @@
 import type { BillingInterval, PlanId } from "@/lib/billing-types";
+import type { PaidPlanId } from "@/lib/billing/pricing";
+import { normalizePlanId } from "@/lib/billing/normalize-plan";
 import { BillingError } from "@/lib/billing/errors";
 
 function sanitizeEnvValue(value: string): string {
@@ -59,14 +61,29 @@ export function getPayPalApiBaseUrl(): string {
     : "https://api-m.paypal.com";
 }
 
+function paypalPlanEnvKey(planId: PaidPlanId, interval: BillingInterval): string {
+  if (planId === "team") {
+    return interval === "monthly"
+      ? "PAYPAL_PLAN_TEAM_MONTHLY"
+      : "PAYPAL_PLAN_TEAM_YEARLY";
+  }
+  return interval === "monthly"
+    ? "PAYPAL_PLAN_PROFESSIONAL_MONTHLY"
+    : "PAYPAL_PLAN_PROFESSIONAL_YEARLY";
+}
+
 export function resolvePlanFromPayPalPlan(planId: string): {
   planId: PlanId;
   interval: BillingInterval;
 } | null {
   const professionalMonthly = optionalEnv("PAYPAL_PLAN_PROFESSIONAL_MONTHLY");
   const professionalYearly = optionalEnv("PAYPAL_PLAN_PROFESSIONAL_YEARLY");
-  const enterpriseMonthly = optionalEnv("PAYPAL_PLAN_ENTERPRISE_MONTHLY");
-  const enterpriseYearly = optionalEnv("PAYPAL_PLAN_ENTERPRISE_YEARLY");
+  const teamMonthly =
+    optionalEnv("PAYPAL_PLAN_TEAM_MONTHLY") ??
+    optionalEnv("PAYPAL_PLAN_ENTERPRISE_MONTHLY");
+  const teamYearly =
+    optionalEnv("PAYPAL_PLAN_TEAM_YEARLY") ??
+    optionalEnv("PAYPAL_PLAN_ENTERPRISE_YEARLY");
 
   if (planId === professionalMonthly) {
     return { planId: "professional", interval: "monthly" };
@@ -74,53 +91,49 @@ export function resolvePlanFromPayPalPlan(planId: string): {
   if (planId === professionalYearly) {
     return { planId: "professional", interval: "yearly" };
   }
-  if (planId === enterpriseMonthly) {
-    return { planId: "enterprise", interval: "monthly" };
+  if (planId === teamMonthly) {
+    return { planId: "team", interval: "monthly" };
   }
-  if (planId === enterpriseYearly) {
-    return { planId: "enterprise", interval: "yearly" };
+  if (planId === teamYearly) {
+    return { planId: "team", interval: "yearly" };
   }
 
   return null;
 }
 
-export function getPayPalPlanId(interval: BillingInterval): string {
-  const key =
-    interval === "monthly"
-      ? "PAYPAL_PLAN_PROFESSIONAL_MONTHLY"
-      : "PAYPAL_PLAN_PROFESSIONAL_YEARLY";
-  const planId = requireEnv(key);
+export function getPayPalPlanId(
+  planId: PaidPlanId,
+  interval: BillingInterval
+): string {
+  const key = paypalPlanEnvKey(planId, interval);
+  const paypalPlanId = requireEnv(key);
 
-  if (!isValidPayPalPlanId(planId)) {
+  if (!isValidPayPalPlanId(paypalPlanId)) {
     throw new BillingError(
       `Invalid ${key}. Use the 26-character Plan ID from PayPal (starts with P-, not PROD- or your webhook ID). Run npm run paypal:create-plans and copy the printed P-... values to Railway.`
     );
   }
 
-  return planId;
+  return paypalPlanId;
 }
 
 export function getPayPalPlanIdOptional(
+  planId: PaidPlanId,
   interval: BillingInterval
 ): string | undefined {
-  const planId =
-    interval === "monthly"
-      ? optionalEnv("PAYPAL_PLAN_PROFESSIONAL_MONTHLY")
-      : optionalEnv("PAYPAL_PLAN_PROFESSIONAL_YEARLY");
+  const envKey = paypalPlanEnvKey(planId, interval);
+  const paypalPlanId = optionalEnv(envKey);
 
-  return isValidPayPalPlanId(planId) ? planId : undefined;
+  return isValidPayPalPlanId(paypalPlanId) ? paypalPlanId : undefined;
 }
 
 export function isPayPalCheckoutConfigured(
-  interval?: BillingInterval
+  planId: PaidPlanId,
+  interval: BillingInterval
 ): boolean {
   if (!optionalEnv("PAYPAL_CLIENT_ID") || !optionalEnv("PAYPAL_CLIENT_SECRET")) {
     return false;
   }
-  if (interval) {
-    return !!getPayPalPlanIdOptional(interval);
-  }
-  return (
-    !!getPayPalPlanIdOptional("monthly") && !!getPayPalPlanIdOptional("yearly")
-  );
+
+  return !!getPayPalPlanIdOptional(planId, interval);
 }

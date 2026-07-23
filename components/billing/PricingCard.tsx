@@ -90,15 +90,13 @@ export default function PricingCard({
       <button
         type="button"
         onClick={() => onSelect(plan.id)}
-        disabled={isCurrent || loading || plan.id === "enterprise"}
+        disabled={isCurrent || loading}
         className={`stripe-plan-cta w-full rounded-xl py-3 text-sm font-semibold transition-all ${
           isCurrent
             ? "cursor-default bg-white/5 text-zinc-500 ring-1 ring-white/10"
             : plan.popular
               ? "bg-[#635BFF] text-white shadow-lg shadow-[#635BFF]/25 hover:bg-[#5851ea] hover:shadow-[#635BFF]/35"
-              : plan.id === "enterprise"
-                ? "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/8"
-                : "bg-white/8 text-zinc-200 ring-1 ring-white/12 hover:bg-white/12"
+              : "bg-white/8 text-zinc-200 ring-1 ring-white/12 hover:bg-white/12"
         } disabled:opacity-60`}
       >
         {loading ? (

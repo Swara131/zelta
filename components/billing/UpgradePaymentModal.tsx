@@ -2,6 +2,8 @@
 
 import { CreditCard, X } from "lucide-react";
 import type { BillingInterval } from "@/lib/billing-types";
+import { PLAN_LABELS } from "@/lib/billing/plans";
+import { formatPlanPriceLabel, type PaidPlanId } from "@/lib/billing/pricing";
 import Button from "@/components/ui/Button";
 
 type PaymentProvider = "stripe" | "paypal";
@@ -13,6 +15,7 @@ export type CheckoutProviders = {
 
 interface UpgradePaymentModalProps {
   open: boolean;
+  planId: PaidPlanId;
   interval: BillingInterval;
   providers: CheckoutProviders | null;
   loadingProvider: PaymentProvider | null;
@@ -21,12 +24,9 @@ interface UpgradePaymentModalProps {
   onSelect: (provider: PaymentProvider) => void;
 }
 
-function formatAmount(interval: BillingInterval): string {
-  return interval === "monthly" ? "$49/month" : "$490/year";
-}
-
 export default function UpgradePaymentModal({
   open,
+  planId,
   interval,
   providers,
   loadingProvider,
@@ -40,6 +40,7 @@ export default function UpgradePaymentModal({
   const paypalAvailable = providers?.paypal ?? false;
   const noneAvailable = providers !== null && !stripeAvailable && !paypalAvailable;
   const loadingProviders = providers === null;
+  const planLabel = PLAN_LABELS[planId];
 
   return (
     <>
@@ -61,10 +62,10 @@ export default function UpgradePaymentModal({
                 id="upgrade-payment-title"
                 className="text-lg font-semibold text-zinc-100"
               >
-                Upgrade to Professional
+                Upgrade to {planLabel}
               </h2>
               <p className="mt-1 text-sm text-zinc-500">
-                {formatAmount(interval)} · Choose how to pay
+                {formatPlanPriceLabel(planId, interval)} · Choose how to pay
               </p>
             </div>
             <button
@@ -92,8 +93,8 @@ export default function UpgradePaymentModal({
                 className="rounded-lg bg-amber-500/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/20"
                 role="status"
               >
-                Payment checkout is not configured yet. Add PayPal plan IDs and credentials
-                on Railway, then redeploy.
+                Payment checkout is not configured yet. Add PayPal plan IDs and
+                credentials on Railway, then redeploy.
               </div>
             )}
 

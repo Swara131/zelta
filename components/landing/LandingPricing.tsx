@@ -23,7 +23,7 @@ export default function LandingPricing() {
             Plans that scale with your agents
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-sm text-zinc-500">
-            Start free with the gateway API. Upgrade for hybrid enforcement, analytics, and enterprise controls.
+            Start free with the gateway API. Upgrade for hybrid enforcement, analytics, and team controls.
           </p>
           <div className="mt-8 inline-flex rounded-full bg-white/5 p-1 ring-1 ring-white/10">
             <button
@@ -103,7 +103,7 @@ export default function LandingPricing() {
                       : "bg-white/8 text-zinc-200 ring-1 ring-white/10 hover:bg-white/12"
                   }`}
                 >
-                  {plan.id === "enterprise" ? "Contact sales" : "Get started"}
+                  Get started
                 </Link>
               </motion.div>
             );

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BillingInterval } from "@/lib/billing-types";
+import type { PaidPlanId } from "@/lib/billing/pricing";
 import { ensureOrganization } from "@/lib/organizations/ensure-organization";
 import { getAppUrl } from "@/lib/billing/env";
 import { BillingError } from "@/lib/billing/errors";
@@ -21,11 +22,13 @@ type PayPalSubscriptionCreateResponse = {
 
 function buildBillingReturnUrl(
   appUrl: string,
-  outcome: "success" | "canceled"
+  outcome: "success" | "canceled",
+  planId: PaidPlanId
 ): string {
   const url = new URL("/billing", appUrl);
   url.searchParams.set("checkout", outcome);
   url.searchParams.set("provider", "paypal");
+  url.searchParams.set("plan", planId);
   return url.toString();
 }
 
@@ -34,6 +37,7 @@ export async function createPayPalCheckoutSession(
   params: {
     userId: string;
     userEmail: string;
+    planId: PaidPlanId;
     interval: BillingInterval;
   }
 ): Promise<string> {
@@ -43,7 +47,7 @@ export async function createPayPalCheckoutSession(
     params.userEmail
   );
 
-  const planId = getPayPalPlanId(params.interval);
+  const paypalPlanId = getPayPalPlanId(params.planId, params.interval);
   const appUrl = getAppUrl();
   const environment = getPayPalEnvironment();
 
@@ -66,7 +70,7 @@ export async function createPayPalCheckoutSession(
         "PayPal-Request-Id": randomUUID(),
       },
       body: JSON.stringify({
-        plan_id: planId,
+        plan_id: paypalPlanId,
         custom_id: organizationId.slice(0, 127),
         subscriber: {
           email_address: email,
@@ -76,8 +80,8 @@ export async function createPayPalCheckoutSession(
           locale: "en-US",
           shipping_preference: "NO_SHIPPING",
           user_action: "SUBSCRIBE_NOW",
-          return_url: buildBillingReturnUrl(appUrl, "success"),
-          cancel_url: buildBillingReturnUrl(appUrl, "canceled"),
+          return_url: buildBillingReturnUrl(appUrl, "success", params.planId),
+          cancel_url: buildBillingReturnUrl(appUrl, "canceled", params.planId),
         },
       }),
     }

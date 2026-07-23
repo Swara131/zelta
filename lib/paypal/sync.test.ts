@@ -63,6 +63,8 @@ describe("PayPal plan mapping", () => {
   it("maps configured PayPal plan IDs", () => {
     process.env.PAYPAL_PLAN_PROFESSIONAL_MONTHLY = "P-PRO-M";
     process.env.PAYPAL_PLAN_PROFESSIONAL_YEARLY = "P-PRO-Y";
+    process.env.PAYPAL_PLAN_TEAM_MONTHLY = "P-TEAM-M";
+    process.env.PAYPAL_PLAN_TEAM_YEARLY = "P-TEAM-Y";
 
     assert.deepEqual(resolvePlanFromPayPalPlan("P-PRO-M"), {
       planId: "professional",
@@ -72,8 +74,18 @@ describe("PayPal plan mapping", () => {
       planId: "professional",
       interval: "yearly",
     });
+    assert.deepEqual(resolvePlanFromPayPalPlan("P-TEAM-M"), {
+      planId: "team",
+      interval: "monthly",
+    });
+    assert.deepEqual(resolvePlanFromPayPalPlan("P-TEAM-Y"), {
+      planId: "team",
+      interval: "yearly",
+    });
 
     delete process.env.PAYPAL_PLAN_PROFESSIONAL_MONTHLY;
     delete process.env.PAYPAL_PLAN_PROFESSIONAL_YEARLY;
+    delete process.env.PAYPAL_PLAN_TEAM_MONTHLY;
+    delete process.env.PAYPAL_PLAN_TEAM_YEARLY;
   });
 });
