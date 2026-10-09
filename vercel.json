@@ -14,12 +14,19 @@
     },
     "app/api/notifications/retry/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/agent-schedules/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
     {
       "path": "/api/notifications/retry",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/agent-schedules",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 import type { Invoice } from "@/lib/billing-types";
 
 interface InvoiceTableProps {
@@ -13,67 +13,87 @@ const STATUS_STYLES = {
 
 export default function InvoiceTable({ invoices }: InvoiceTableProps) {
   return (
-    <div className="ds-panel">
-      <div className="ds-card-header">
-        <p className="ds-section-title">Billing history</p>
-        <p className="ds-section-description">Invoices and payment receipts</p>
+    <section className="bill-panel ds-panel overflow-hidden" aria-labelledby="bill-history-heading">
+      <div className="bill-history-head">
+        <div>
+          <h3 id="bill-history-heading" className="bill-section-title">
+            Billing history
+          </h3>
+          <p className="bill-section-desc">
+            Download receipts for every charge. Invoices are retained for your records.
+          </p>
+        </div>
       </div>
 
-      <div className="ds-table-wrap">
-        <table className="ds-table">
-          <thead>
-            <tr>
-              <th scope="col">Invoice</th>
-              <th scope="col">Date</th>
-              <th scope="col">Plan</th>
-              <th scope="col">Amount</th>
-              <th scope="col">Status</th>
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => {
-              const status = STATUS_STYLES[inv.status];
-              return (
-                <tr key={inv.id} className="stripe-invoice-row">
-                  <td className="font-mono text-[var(--ds-text-primary)]">{inv.id}</td>
-                  <td>
-                    {new Date(inv.date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </td>
-                  <td>{inv.plan}</td>
-                  <td className="font-mono font-medium text-[var(--ds-text-primary)]">
-                    {inv.amount === 0 ? "$0.00" : `$${inv.amount.toFixed(2)}`}
-                  </td>
-                  <td>
-                    <span
-                      className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                      style={{ background: status.bg, color: status.color }}
-                    >
-                      {status.label}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="ds-btn ds-btn-ghost ds-btn-sm"
-                      aria-label={`Download ${inv.id}`}
-                    >
-                      <Download className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                      PDF
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      {invoices.length === 0 ? (
+        <div className="bill-history-empty">
+          <FileText className="h-8 w-8 text-[var(--ds-text-tertiary)]" strokeWidth={1.75} />
+          <p className="bill-history-empty-title">No invoices yet</p>
+          <p className="bill-history-empty-desc">
+            Your billing history will appear here after your first paid subscription charge.
+            Receipts can be downloaded anytime once available.
+          </p>
+        </div>
+      ) : (
+        <div className="ds-table-wrap">
+          <table className="ds-table">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Plan</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+                <th scope="col">
+                  <span className="sr-only">Receipt</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => {
+                const status = STATUS_STYLES[inv.status];
+                return (
+                  <tr key={inv.id} className="stripe-invoice-row">
+                    <td>
+                      {new Date(inv.date).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </td>
+                    <td>{inv.plan}</td>
+                    <td className="font-medium text-[var(--ds-text-primary)]">
+                      {inv.amount === 0 ? "$0.00" : `$${inv.amount.toFixed(2)}`}
+                    </td>
+                    <td>
+                      <span
+                        className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                        style={{ background: status.bg, color: status.color }}
+                      >
+                        {status.label}
+                      </span>
+                    </td>
+                    <td>
+                      {inv.pdfUrl ? (
+                        <a
+                          href={inv.pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ds-btn ds-btn-ghost ds-btn-sm"
+                        >
+                          <Download className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                          Receipt
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[var(--ds-text-tertiary)]">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

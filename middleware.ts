@@ -22,6 +22,7 @@ import {
   requiresApiAuth,
 } from "@/lib/security/routes";
 import { isCronAuthorizedSecure } from "@/lib/security/env";
+import { isOnboardingComplete } from "@/lib/onboarding/onboarding-status";
 
 function jsonResponse(body: Record<string, unknown>, status: number): NextResponse {
   return applySecurityHeaders(
@@ -81,7 +82,46 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = redirectTo || DASHBOARD_ROUTE;
     url.search = "";
+
+    try {
+      const { data: profile } = await supabase
+        .from("users")
+        .select("onboarding_completed_at")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!isOnboardingComplete(user, profile) && !redirectTo) {
+        url.pathname = "/onboarding/welcome";
+      }
+    } catch {
+      /* fall through to dashboard */
+    }
+
     return applySecurityHeaders(NextResponse.redirect(url));
+  }
+
+  if (
+    user &&
+    isProtectedRoute(pathname) &&
+    !pathname.startsWith("/onboarding/welcome") &&
+    pathname !== "/api/onboarding"
+  ) {
+    try {
+      const { data: profile } = await supabase
+        .from("users")
+        .select("onboarding_completed_at")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!isOnboardingComplete(user, profile)) {
+        const onboardingUrl = request.nextUrl.clone();
+        onboardingUrl.pathname = "/onboarding/welcome";
+        onboardingUrl.search = "";
+        return applySecurityHeaders(NextResponse.redirect(onboardingUrl));
+      }
+    } catch {
+      /* columns may not exist before migration */
+    }
   }
 
   if (pathname === "/auth/reset-password" && !user) {

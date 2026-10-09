@@ -25,7 +25,14 @@ function mapReadStatus(status: string): NotificationItem["status"] {
 }
 
 function mapChannel(channel: string): NotificationChannel {
-  if (channel === "slack" || channel === "teams") return channel;
+  if (
+    channel === "whatsapp" ||
+    channel === "slack" ||
+    channel === "teams" ||
+    channel === "in_app"
+  ) {
+    return channel;
+  }
   return "email";
 }
 

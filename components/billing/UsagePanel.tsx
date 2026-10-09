@@ -1,30 +1,33 @@
-import type { UsageMetric } from "@/lib/billing-types";
+import type { FounderUsageItem } from "@/lib/billing/founder-billing-copy";
 
 interface UsagePanelProps {
-  usage: UsageMetric[];
-  planName: string;
+  usage: FounderUsageItem[];
+  loading?: boolean;
 }
 
-function UsageBar({ metric }: { metric: UsageMetric }) {
+function UsageBar({ metric }: { metric: FounderUsageItem }) {
   const pct = Math.min((metric.used / metric.limit) * 100, 100);
   const isHigh = pct >= 80;
   const isCritical = pct >= 95;
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-medium text-zinc-300">{metric.label}</span>
-        <span className="font-mono text-sm text-zinc-400">
+    <div className="bill-usage-item">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-[var(--ds-text-primary)]">
+          {metric.label}
+        </span>
+        <span className="text-sm text-[var(--ds-text-secondary)]">
           {metric.used.toLocaleString()}
-          <span className="text-zinc-600">
+          <span className="text-[var(--ds-text-tertiary)]">
             {" "}
-            / {metric.limit.toLocaleString()} {metric.unit}
+            / {metric.limit.toLocaleString()}
           </span>
         </span>
       </div>
+
       <div className="stripe-usage-track h-2 overflow-hidden rounded-full">
         <div
-          className="stripe-usage-fill h-full rounded-full transition-all duration-700"
+          className="stripe-usage-fill h-full rounded-full"
           style={{
             width: `${pct}%`,
             background: isCritical
@@ -35,30 +38,36 @@ function UsageBar({ metric }: { metric: UsageMetric }) {
           }}
         />
       </div>
-      {isHigh && (
-        <p className="mt-1.5 text-xs text-amber-400/80">
-          {isCritical ? "Limit almost reached — upgrade recommended" : "Approaching limit"}
-        </p>
-      )}
+
+      <p className="mt-1.5 text-xs text-[var(--ds-text-secondary)]">
+        {metric.helperText}
+      </p>
+      <p className="mt-1 text-xs text-[var(--ds-text-tertiary)]">{metric.explanation}</p>
     </div>
   );
 }
 
-export default function UsagePanel({ usage, planName }: UsagePanelProps) {
+export default function UsagePanel({ usage, loading }: UsagePanelProps) {
   return (
-    <div className="stripe-panel p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="stripe-panel-title">Usage</p>
-          <p className="mt-0.5 text-xs text-zinc-500">{planName} plan · Resets monthly</p>
-        </div>
-      </div>
+    <div className="bill-panel ds-panel p-6">
+      <h3 className="bill-section-title">Your usage</h3>
+      <p className="bill-section-desc mt-1">
+        How much of your plan you&apos;ve used this billing period.
+      </p>
 
-      <div className="flex flex-col gap-6">
-        {usage.map((metric) => (
-          <UsageBar key={metric.label} metric={metric} />
-        ))}
-      </div>
+      {loading ? (
+        <p className="mt-6 text-sm text-[var(--ds-text-tertiary)]">Loading usage…</p>
+      ) : usage.length === 0 ? (
+        <p className="mt-6 text-sm text-[var(--ds-text-secondary)]">
+          Usage data will appear here once your agents start taking protected actions.
+        </p>
+      ) : (
+        <div className="mt-6 flex flex-col gap-5">
+          {usage.map((metric) => (
+            <UsageBar key={metric.label} metric={metric} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

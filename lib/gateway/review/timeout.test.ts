@@ -65,7 +65,7 @@ describe("review timeout lifecycle", () => {
       timeoutBehavior: "auto_deny",
       deps: {
         autoDeny: async () => {
-          deniedRow = { ...row, status: "rejected", decided_at: new Date().toISOString() };
+          deniedRow = { ...row, status: "expired", decided_at: new Date().toISOString() };
           return deniedRow;
         },
         insertDecision: async () => {},
@@ -77,7 +77,7 @@ describe("review timeout lifecycle", () => {
     });
 
     assert.equal(result.outcome, "auto_denied");
-    assert.equal(result.row.status, "rejected");
+    assert.equal(result.row.status, "expired");
     assert.ok(auditEvents.includes("review.expired"));
     assert.ok(auditEvents.includes("review.auto_denied"));
   });
@@ -133,15 +133,15 @@ describe("review timeout lifecycle", () => {
       timeoutBehavior: "escalate",
       escalationMaxLevel: 3,
       deps: {
-        autoDeny: async () => ({ ...row, status: "rejected" }),
+        autoDeny: async () => ({ ...row, status: "expired" }),
         insertDecision: async () => {},
         recordAudit: () => {},
-        getProposal: async () => ({ ...row, status: "rejected" as const }),
+        getProposal: async () => ({ ...row, status: "expired" as const }),
       },
     });
 
     assert.equal(result.outcome, "auto_denied");
-    assert.equal(result.row.status, "rejected");
+    assert.equal(result.row.status, "expired");
   });
 
   it("never auto-approves on timeout", async () => {

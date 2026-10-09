@@ -51,6 +51,11 @@ describe("RUNTIME_EVENT_TO_DB", () => {
       "notification.queued",
       "notification.sent",
       "notification.failed",
+      "runtime.run.started",
+      "runtime.run.finished",
+      "runtime.delivery.started",
+      "runtime.delivery.sent",
+      "runtime.delivery.failed",
     ] as const;
 
     for (const event of required) {

@@ -2,8 +2,8 @@
  * Auth configuration — dashboard entry point and OAuth callback URLs.
  */
 
-/** Primary app entry after login (Upload Logs dashboard). */
-export const DASHBOARD_ROUTE = "/upload";
+/** Primary app entry after login (founder dashboard). */
+export const DASHBOARD_ROUTE = "/dashboard";
 
 export function getAuthCallbackUrl(
   redirectPath: string = DASHBOARD_ROUTE,

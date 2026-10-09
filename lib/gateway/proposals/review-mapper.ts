@@ -4,8 +4,10 @@ import type { MatchedPolicyReason } from "@/lib/gateway/policy/types";
 import { policyDecisionFromDb } from "@/lib/gateway/policy/types";
 import type { StoredRiskReasons } from "./enrichment";
 import { extractMatchedPoliciesFromRiskReasons } from "./enrichment";
+import { buildRiskScoreBreakdown } from "@/lib/approvals/risk-score-breakdown";
 import { mapShadowRiskDisplay } from "@/lib/ui/shadow-risk-display";
 import type { ActionProposalRow } from "./repository";
+import { sanitizeActionParameters } from "@/lib/safety/sanitize";
 
 const SEVERITIES = new Set<RiskSeverity>(["critical", "high", "medium", "low"]);
 
@@ -43,6 +45,24 @@ function buildTitle(row: ActionProposalRow): string {
   return `${row.tool_name} — ${row.action_type}`;
 }
 
+function maskIdentifier(value: string): string {
+  if (value.length <= 6) return `${value.slice(0, 2)}***`;
+  return `${value.slice(0, 4)}*****`;
+}
+
+function sanitizeDisplayPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.startsWith("_zelta")) continue;
+    if (typeof value === "string" && /id$/i.test(key) && value.length > 6) {
+      cleaned[key] = maskIdentifier(value);
+      continue;
+    }
+    cleaned[key] = value;
+  }
+  return sanitizeActionParameters(cleaned);
+}
+
 export function mapReviewProposalToPendingApproval(
   row: ActionProposalRow
 ): PendingApproval {
@@ -51,6 +71,17 @@ export function mapReviewProposalToPendingApproval(
   const matchedPolicies: MatchedPolicyReason[] = stored.matchedPolicies ?? [];
   const aiRiskReasons = stored.ai?.riskReasons ?? [];
   const reviewerAssistance = stored.ai?.reviewerAssistance ?? "";
+  const shadowRisk = mapShadowRiskDisplay(row.risk_reasons, row.policy_decision);
+  const riskScoreBreakdown =
+    buildRiskScoreBreakdown({
+      riskScore: row.risk_score,
+      riskSeverity,
+      riskReasons: row.risk_reasons,
+      matchedPolicies,
+      aiRiskReasons,
+      shadowReasons: shadowRisk.reasons,
+      shadowSignalLabels: shadowRisk.signalLabels,
+    }) ?? undefined;
 
   return {
     id: row.id,
@@ -101,12 +132,13 @@ export function mapReviewProposalToPendingApproval(
     source: "gateway",
     toolName: row.tool_name,
     actionType: row.action_type,
-    actionPayload: row.action_payload ?? {},
+    actionPayload: sanitizeDisplayPayload(row.action_payload ?? {}),
     actionHash: row.action_hash,
     matchedPolicies,
     aiRiskReasons,
     riskScore: row.risk_score,
+    riskScoreBreakdown,
     gatewayDecision: policyDecisionFromDb(row.policy_decision) ?? undefined,
-    shadowRisk: mapShadowRiskDisplay(row.risk_reasons, row.policy_decision),
+    shadowRisk,
   };
 }

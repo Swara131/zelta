@@ -3,7 +3,6 @@
 import {
   Upload,
   Brain,
-  Shield,
   UserCheck,
   MessageSquare,
   AlertTriangle,

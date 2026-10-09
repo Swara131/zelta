@@ -8,7 +8,10 @@ export const PUBLIC_API_PREFIXES = [
 export const GATEWAY_AGENT_API_PREFIXES = ["/api/v1/"] as const;
 
 /** Routes that accept cron bearer token instead of user session. */
-export const CRON_API_ROUTES = ["/api/notifications/retry"] as const;
+export const CRON_API_ROUTES = [
+  "/api/notifications/retry",
+  "/api/cron/agent-schedules",
+] as const;
 
 export function isApiRoute(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");

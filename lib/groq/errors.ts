@@ -19,21 +19,30 @@ export class AiProposalEnrichmentError extends Error {
   }
 }
 
+export class AiAgentBuilderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiAgentBuilderError";
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function formatGroqError(
   err: unknown,
-  kind: "translation" | "risk" | "proposal"
-): AiTranslationError | AiRiskAnalysisError | AiProposalEnrichmentError {
+  kind: "translation" | "risk" | "proposal" | "agent-builder"
+): AiTranslationError | AiRiskAnalysisError | AiProposalEnrichmentError | AiAgentBuilderError {
   const raw = err instanceof Error ? err.message : String(err);
   const ErrorClass =
     kind === "translation"
       ? AiTranslationError
       : kind === "proposal"
         ? AiProposalEnrichmentError
-        : AiRiskAnalysisError;
+        : kind === "agent-builder"
+          ? AiAgentBuilderError
+          : AiRiskAnalysisError;
 
   if (raw.includes("429") || raw.toLowerCase().includes("rate limit")) {
     return new ErrorClass(
@@ -65,7 +74,7 @@ export function isGroqRateLimitError(err: unknown): boolean {
 
 export async function withGroqRetry<T>(
   fn: () => Promise<T>,
-  kind: "translation" | "risk" | "proposal",
+  kind: "translation" | "risk" | "proposal" | "agent-builder",
   maxRetries = 1
 ): Promise<T> {
   let lastError: unknown;

@@ -60,6 +60,7 @@ export default function NotificationsPage() {
       unread: notifications.filter((n) => n.status === "unread").length,
       all: notifications.length,
       email: notifications.filter((n) => n.channel === "email").length,
+      whatsapp: notifications.filter((n) => n.channel === "whatsapp").length,
       slack: notifications.filter((n) => n.channel === "slack").length,
       teams: notifications.filter((n) => n.channel === "teams").length,
     }),
@@ -72,6 +73,8 @@ export default function NotificationsPage() {
         return notifications.filter((n) => n.status === "unread");
       case "email":
         return notifications.filter((n) => n.channel === "email");
+      case "whatsapp":
+        return notifications.filter((n) => n.channel === "whatsapp");
       case "slack":
         return notifications.filter((n) => n.channel === "slack");
       case "teams":
@@ -154,8 +157,8 @@ export default function NotificationsPage() {
     <PageShell maxWidth="4xl">
       <PageHeader
         icon={Bell}
-        title="Notifications"
-        description="Risk alerts and approval notifications across Email, Slack, and Teams."
+        title="Alerts"
+        description="Notifications when an agent action needs your attention — by email, Slack, or Teams."
         badge={
           counts.unread > 0 ? (
             <span className="ds-badge ds-badge-brand">{counts.unread} unread</span>

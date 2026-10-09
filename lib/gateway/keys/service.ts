@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentApiKeyRecord, AgentAuthContext, CreatedAgentApiKey } from "@/lib/gateway/types";
-import { AgentAuthError, AgentKeyError } from "@/lib/gateway/errors";
+import { AgentAuthError } from "@/lib/gateway/errors";
 import {
   generateAgentApiKeyMaterial,
   hashAgentApiKey,

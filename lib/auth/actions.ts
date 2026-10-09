@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl } from "@/lib/auth/config";
-import { AuthError, toAuthError } from "@/lib/auth/errors";
+import { toAuthError } from "@/lib/auth/errors";
 
 export { AuthError } from "@/lib/auth/errors";
 

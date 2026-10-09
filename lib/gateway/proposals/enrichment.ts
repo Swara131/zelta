@@ -26,6 +26,22 @@ export interface StoredRiskReasons {
   decisionComposition?: StoredDecisionComposition;
   /** Review timeout escalation metadata (extensible without org roles). */
   reviewEscalation?: StoredReviewEscalation;
+  /** Grok (xAI) action risk score from POST /propose. */
+  grok?: {
+    riskScore?: number;
+    reason?: string;
+    factors?: Array<{
+      label: string;
+      weight: number;
+      direction: "increase" | "decrease";
+    }>;
+    decision?: string;
+    model?: string;
+    failure?: {
+      message: string;
+      recordedAt: string;
+    };
+  };
 }
 
 export type EnrichmentOutcome =
@@ -109,13 +125,13 @@ export function assertPolicyDecisionUnchanged(params: {
 
 export function resolveFinalDecision(
   policyDecision: PolicyDecisionOutcome,
-  _enrichment: EnrichmentOutcome
+  enrichment?: EnrichmentOutcome
 ): PolicyDecisionOutcome {
   assertPolicyDecisionUnchanged({
     policyDecision,
     finalDecision: policyDecision,
   });
-  return policyDecision;
+  return enrichment ? policyDecision : policyDecision;
 }
 
 export {

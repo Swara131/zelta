@@ -15,6 +15,8 @@ describe("renderGatewayReviewRequested", () => {
       riskReasons: ["Large refund: Amount threshold exceeded"],
       reviewDeadline: "2026-07-10T18:00:00.000Z",
       approvalsUrl: "https://app.example.com/approvals?proposal=44444444-4444-4444-8444-444444444444",
+      approveUrl: "https://app.example.com/approve/al_rev_testtoken123",
+      rejectUrl: "https://app.example.com/deny/al_rev_testtoken123",
       recipientName: "Reviewer",
     });
 
@@ -22,7 +24,9 @@ describe("renderGatewayReviewRequested", () => {
     assert.match(rendered.html, /refund-agent-01/);
     assert.match(rendered.html, /financial\.refund/);
     assert.match(rendered.html, /Amount threshold exceeded/);
-    assert.match(rendered.html, /approvals\?proposal=/);
+    assert.match(rendered.html, /\/approve\/al_rev_testtoken123/);
+    assert.match(rendered.html, /\/deny\/al_rev_testtoken123/);
+    assert.match(rendered.html, /Deny<\/a>/);
     assert.doesNotMatch(rendered.html, /et_[a-z0-9_+-]{16,}/i);
   });
 
@@ -38,6 +42,8 @@ describe("renderGatewayReviewRequested", () => {
       riskReasons: ['<script>alert("xss")</script>'],
       reviewDeadline: "2026-07-10T18:00:00.000Z",
       approvalsUrl: "https://app.example.com/approvals?proposal=44444444-4444-4444-8444-444444444444",
+      approveUrl: "https://app.example.com/approve/al_rev_testtoken123",
+      rejectUrl: "https://app.example.com/deny/al_rev_testtoken123",
       recipientName: "Reviewer<script>",
     });
 

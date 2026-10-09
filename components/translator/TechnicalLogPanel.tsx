@@ -21,11 +21,6 @@ function tokenizeJsonLine(line: string): SyntaxToken[] {
       tokens.push({ text: match[1], className: "syntax-key" });
       tokens.push({ text: match[2], className: "syntax-punct" });
     } else if (/^"/.test(raw)) {
-      const isRisk =
-        raw.includes("high") ||
-        raw.includes("critical") ||
-        raw.includes("medium") ||
-        raw.includes("low");
       const isAction = raw.includes("file_") || raw.includes("shell_") || raw.includes("database_") || raw.includes("permission_") || raw.includes("network_") || raw.includes("api_");
       if (raw.includes("critical") || raw.includes("high")) {
         tokens.push({ text: raw, className: "syntax-risk-high" });

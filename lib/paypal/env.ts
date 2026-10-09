@@ -1,6 +1,5 @@
 import type { BillingInterval, PlanId } from "@/lib/billing-types";
 import type { PaidPlanId } from "@/lib/billing/pricing";
-import { normalizePlanId } from "@/lib/billing/normalize-plan";
 import { BillingError } from "@/lib/billing/errors";
 
 function sanitizeEnvValue(value: string): string {

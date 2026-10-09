@@ -130,7 +130,7 @@ describe("decideGatewayProposalReview", () => {
 
     harness.deps.ensureFresh = async () => ({
       ...harness.getRow(),
-      status: "rejected",
+      status: "expired",
     });
 
     await assert.rejects(
@@ -148,7 +148,7 @@ describe("decideGatewayProposalReview", () => {
           harness.deps
         ),
       (err: ProposalError) => {
-        assert.match(err.message, /automatically denied/i);
+        assert.match(err.message, /expired/i);
         return true;
       }
     );

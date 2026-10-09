@@ -136,8 +136,8 @@ async function performAutoDeny(
     actionProposalId: row.id,
     decisionSource: "system",
     policyDecision: row.policy_decision as "review" | null,
-    proposalStatus: "rejected",
-    reason: "Review deadline expired; automatically denied.",
+    proposalStatus: "expired",
+    reason: "Review deadline expired; the action was not executed.",
     metadata: {
       actionHash: row.action_hash,
       reviewExpiresAt: effectiveReviewDeadline(row),
@@ -159,6 +159,28 @@ async function performAutoDeny(
       actionType: row.action_type,
     },
   });
+
+  const payload = row.action_payload ?? {};
+  const runId =
+    typeof payload._zeltaRuntimeRunId === "string" ? payload._zeltaRuntimeRunId : null;
+  if (runId) {
+    try {
+      await supabase
+        .from("agent_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Approval expired. The protected action was not executed.",
+          finished_at: processedAt,
+        })
+        .eq("id", runId)
+        .eq("status", "awaiting_approval");
+    } catch (err) {
+      console.warn("[review-timeout] failed to expire linked run", {
+        runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   return updated;
 }
@@ -265,7 +287,10 @@ export async function applyReviewTimeoutIfExpired(
       (await performAutoDeny(supabase, row, processedAt, deps)) ?? row;
     return {
       row: updated,
-      outcome: updated.status === "rejected" ? "auto_denied" : "none",
+      outcome:
+        updated.status === "expired" || updated.status === "rejected"
+          ? "auto_denied"
+          : "none",
     };
   }
 

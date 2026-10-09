@@ -18,6 +18,18 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+function mockFetch(
+  impl: (url: string, init?: RequestInit) => Response
+): typeof fetch {
+  return (input, init) => Promise.resolve(impl(requestUrl(input), init));
+}
+
 function createClient(fetchImpl: typeof fetch): ApprovalLayerAgentClient {
   return new ApprovalLayerAgentClient({
     baseUrl: BASE_URL,
@@ -42,11 +54,13 @@ describe("ApprovalLayerAgentClient", () => {
     let capturedUrl = "";
     let capturedInit: RequestInit | undefined;
 
-    const client = createClient((url, init) => {
-      capturedUrl = url;
-      capturedInit = init;
-      return jsonResponse(proposeBody, 201);
-    });
+    const client = createClient(
+      mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedInit = init;
+        return jsonResponse(proposeBody, 201);
+      })
+    );
 
     const result = await client.propose({
       agentId: "demo-refund-agent",
@@ -80,10 +94,12 @@ describe("ApprovalLayerAgentClient", () => {
     };
 
     let capturedUrl = "";
-    const client = createClient((url) => {
-      capturedUrl = url;
-      return jsonResponse(statusBody);
-    });
+    const client = createClient(
+      mockFetch((url) => {
+        capturedUrl = url;
+        return jsonResponse(statusBody);
+      })
+    );
 
     const result = await client.getStatus(PROPOSAL_ID);
     assert.equal(result.executionToken, "et_test_token");
@@ -95,7 +111,8 @@ describe("ApprovalLayerAgentClient", () => {
 
   it("pollUntilResolved returns when execution token is issued", async () => {
     let calls = 0;
-    const client = createClient((url) => {
+    const client = createClient(
+      mockFetch((url) => {
       if (!url.endsWith("/status")) {
         throw new Error(`Unexpected URL: ${url}`);
       }
@@ -115,7 +132,8 @@ describe("ApprovalLayerAgentClient", () => {
         actionHash: "hash-abc",
         executionToken: "et_fresh_token",
       });
-    });
+    })
+    );
 
     const result = await client.pollUntilResolved(PROPOSAL_ID);
     assert.equal(result.executionToken, "et_fresh_token");
@@ -123,12 +141,14 @@ describe("ApprovalLayerAgentClient", () => {
   });
 
   it("pollUntilResolved throws proposal_blocked for blocked status", async () => {
-    const client = createClient(() =>
-      jsonResponse({
-        proposalId: PROPOSAL_ID,
-        status: "blocked",
-        actionHash: "hash-abc",
-      })
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({
+          proposalId: PROPOSAL_ID,
+          status: "blocked",
+          actionHash: "hash-abc",
+        })
+      )
     );
 
     await assert.rejects(
@@ -147,12 +167,13 @@ describe("ApprovalLayerAgentClient", () => {
       apiKey: API_KEY,
       pollIntervalMs: 5,
       pollTimeoutMs: 20,
-      fetchImpl: () =>
+      fetchImpl: mockFetch(() =>
         jsonResponse({
           proposalId: PROPOSAL_ID,
           status: "pending",
           actionHash: "hash-abc",
-        }),
+        })
+      ),
       sleep: async () => {},
     });
 
@@ -168,15 +189,17 @@ describe("ApprovalLayerAgentClient", () => {
 
   it("verifyExecution posts token and action binding fields", async () => {
     let capturedBody: unknown;
-    const client = createClient((_url, init) => {
-      capturedBody = JSON.parse(String(init?.body));
-      return jsonResponse({
-        allowed: true,
-        proposalId: PROPOSAL_ID,
-        actionHash: "hash-abc",
-        consumedAt: "2026-07-08T12:00:00.000Z",
-      });
-    });
+    const client = createClient(
+      mockFetch((_url, init) => {
+        capturedBody = JSON.parse(String(init?.body));
+        return jsonResponse({
+          allowed: true,
+          proposalId: PROPOSAL_ID,
+          actionHash: "hash-abc",
+          consumedAt: "2026-07-08T12:00:00.000Z",
+        });
+      })
+    );
 
     const result = await client.verifyExecution(PROPOSAL_ID, {
       executionToken: "et_test_token",
@@ -195,8 +218,10 @@ describe("ApprovalLayerAgentClient", () => {
   });
 
   it("maps API 401 errors to GatewayClientError unauthorized", async () => {
-    const client = createClient(() =>
-      jsonResponse({ error: "Invalid agent API key.", code: "invalid_token" }, 401)
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({ error: "Invalid agent API key.", code: "invalid_token" }, 401)
+      )
     );
 
     await assert.rejects(
@@ -213,10 +238,12 @@ describe("ApprovalLayerAgentClient", () => {
   });
 
   it("maps API 403 verify errors to GatewayClientError forbidden", async () => {
-    const client = createClient(() =>
-      jsonResponse(
-        { error: "Execution token has already been used.", code: "replayed" },
-        403
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse(
+          { error: "Execution token has already been used.", code: "replayed" },
+          403
+        )
       )
     );
 
@@ -239,11 +266,13 @@ describe("ApprovalLayerAgentClient", () => {
 
   it("throws invalid_response for non-JSON error bodies", async () => {
     const client = createClient(
-      () =>
-        new Response("<html>404</html>", {
-          status: 404,
-          headers: { "Content-Type": "text/html" },
-        })
+      mockFetch(
+        () =>
+          new Response("<html>404</html>", {
+            status: 404,
+            headers: { "Content-Type": "text/html" },
+          })
+      )
     );
 
     await assert.rejects(
@@ -261,14 +290,14 @@ describe("ApprovalLayerAgentClient", () => {
     const client = new ApprovalLayerAgentClient({
       baseUrl: "http://localhost:3000///",
       apiKey: API_KEY,
-      fetchImpl: (url) => {
+      fetchImpl: mockFetch((url) => {
         capturedUrl = url;
         return jsonResponse({
           proposalId: PROPOSAL_ID,
           status: "approved",
           actionHash: "hash",
         });
-      },
+      }),
     });
 
     await client.getStatus(PROPOSAL_ID);

@@ -47,7 +47,7 @@ export function emailLayout({
         <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
           <tr>
             <td style="padding:0 0 20px;text-align:center;">
-              <span style="font-size:20px;font-weight:700;color:#f4f4f5;letter-spacing:-0.02em;">ApprovalLayer</span>
+              <span style="font-size:20px;font-weight:700;color:#f4f4f5;letter-spacing:-0.02em;">Wave</span>
             </td>
           </tr>
           <tr>
@@ -79,10 +79,10 @@ export function emailLayout({
           <tr>
             <td style="padding:24px 8px 0;text-align:center;">
               <p style="margin:0;font-size:12px;line-height:1.6;color:#71717a;">
-                Sent by <a href="${escapeHtml(appUrl)}" style="color:#a5b4fc;text-decoration:none;">ApprovalLayer</a><br />
-                Agent action governance &amp; approval workflows
+                Sent by <a href="${escapeHtml(appUrl)}" style="color:#a5b4fc;text-decoration:none;">Wave</a><br />
+                AI agent safety &amp; control
               </p>
-              <p style="margin:8px 0 0;font-size:11px;color:#52525b;">&copy; ${year} ApprovalLayer</p>
+              <p style="margin:8px 0 0;font-size:11px;color:#52525b;">&copy; ${year} Wave</p>
             </td>
           </tr>
         </table>

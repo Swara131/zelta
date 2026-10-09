@@ -279,6 +279,17 @@ export function createHybridProposeHarness(options: {
       assert.equal(params.actionHash, insertedActionHash);
       assert.equal(params.proposalId, proposal?.id);
     },
+    scoreProposedActionRisk: async () => ({
+      ok: true as const,
+      data: {
+        risk_score: 0.1,
+        reason: "Low risk test action",
+        factors: [],
+        decision: "ALLOW" as const,
+        policyDecision: "ALLOW" as const,
+        model: "grok-2",
+      },
+    }),
   };
 
   return {
@@ -430,7 +441,7 @@ export function createHumanDecisionDepsWithTimeout(state: {
   };
 
   return {
-    ensureFresh: async (supabase, params, options) =>
+    ensureFresh: async (supabase, params) =>
       ensureReviewFreshOrProcessed(supabase, params, {
         deps: reviewTimeoutDeps,
       }),

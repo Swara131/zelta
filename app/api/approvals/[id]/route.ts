@@ -55,7 +55,7 @@ export async function POST(
 
     if (gatewayProposal) {
       if (gatewayProposal.status !== "review_required") {
-        throw new ProposalError(`Proposal is already ${gatewayProposal.status}.`);
+        throw new ProposalError("This approval has already been resolved.");
       }
 
       if (decision !== "approved" && decision !== "rejected") {

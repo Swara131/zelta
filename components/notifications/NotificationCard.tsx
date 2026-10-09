@@ -29,8 +29,10 @@ interface NotificationCardProps {
 
 const CHANNEL_ICONS = {
   email: Mail,
+  whatsapp: MessageSquare,
   slack: MessageSquare,
   teams: Users,
+  in_app: Users,
 };
 
 export default function NotificationCard({

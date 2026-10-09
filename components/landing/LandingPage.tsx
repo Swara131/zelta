@@ -1,32 +1,28 @@
 import LandingNavbar from "./LandingNavbar";
-import AnimatedBackground from "./AnimatedBackground";
 import Hero from "./Hero";
-import LogoCloud from "./LogoCloud";
-import ProblemSection from "./ProblemSection";
+import TrustStrip from "./TrustStrip";
 import HowItWorks from "./HowItWorks";
-import FeaturesSection from "./FeaturesSection";
-import ArchitectureSection from "./ArchitectureSection";
-import DeveloperCodeSection from "./DeveloperCodeSection";
+import LandingWorkflowShowcase from "./LandingWorkflowShowcase";
+import LandingTemplateShowcase from "./LandingTemplateShowcase";
+import LandingSafetySection from "./LandingSafetySection";
 import LandingPricing from "./LandingPricing";
-import FAQSection from "./FAQSection";
 import CTASection from "./CTASection";
 import LandingFooter from "./LandingFooter";
 
 export default function LandingPage() {
   return (
-    <div className="landing-page relative min-h-screen bg-[#06060a] text-zinc-100">
-      <AnimatedBackground />
+    <div className="landing-page min-h-screen">
       <LandingNavbar />
       <main id="main-content">
         <Hero />
-        <LogoCloud />
-        <ProblemSection />
+        <TrustStrip />
         <HowItWorks />
-        <FeaturesSection />
-        <ArchitectureSection />
-        <DeveloperCodeSection />
-        <LandingPricing />
-        <FAQSection />
+        <LandingWorkflowShowcase />
+        <LandingTemplateShowcase />
+        <LandingSafetySection />
+        <div id="pricing">
+          <LandingPricing />
+        </div>
         <CTASection />
       </main>
       <LandingFooter />

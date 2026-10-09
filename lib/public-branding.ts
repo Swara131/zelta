@@ -1,8 +1,12 @@
 /** Public-facing brand constants. Internal package/API names remain unchanged. */
 
-export const COMPANY_NAME = "Zelta";
+export const COMPANY_NAME = "Wave";
 
-export const TAGLINE = "AI Infrastructure for Autonomous Agents";
+export const TAGLINE =
+  "Build AI agents from a prompt. See the workflow. Keep every action protected.";
+
+/** Shown in the app shell and founder-facing dashboard. */
+export const APP_TAGLINE = "Build & Protect Your AI Agents";
 
 export const PRODUCT_NAME = "ApprovalLayer";
 
@@ -10,11 +14,11 @@ export const PRODUCT_SHORT_DESCRIPTION =
   "AI Safety Gateway for autonomous agents";
 
 export const HERO_BODY =
-  "ApprovalLayer is Zelta's AI Safety Gateway that helps autonomous AI agents safely execute high-impact actions using policies, hybrid AI risk classification, human approvals, audit trails, and execution tokens.";
+  "Describe your goal. Wave creates an editable workflow, connects your tools, and protects every important action.";
 
 export const DEFAULT_DESCRIPTION = HERO_BODY;
 
-export const DASHBOARD_SUBTITLE = "ApprovalLayer Dashboard";
+export const DASHBOARD_SUBTITLE = APP_TAGLINE;
 
 export function pageTitle(page?: string): string {
   return page ? `${page} | ${COMPANY_NAME}` : `${COMPANY_NAME} — ${TAGLINE}`;

@@ -19,6 +19,24 @@ describe("extractConciseRiskReasons", () => {
     ]);
   });
 
+  it("includes weighted Grok factors when available", () => {
+    const reasons = extractConciseRiskReasons({
+      matchedPolicies: [],
+      grok: {
+        reason: "High refund amount",
+        factors: [
+          { label: "Amount exceeds ₹5,000 threshold", weight: 0.4, direction: "increase" },
+          { label: "Customer has strong rating", weight: 0.02, direction: "decrease" },
+        ],
+      },
+    });
+
+    assert.deepEqual(reasons, [
+      "Amount exceeds ₹5,000 threshold (+0.40)",
+      "Customer has strong rating (-0.02)",
+    ]);
+  });
+
   it("caps reason count", () => {
     const reasons = extractConciseRiskReasons({
       matchedPolicies: [],

@@ -59,11 +59,29 @@ export function buildPolicyEvaluationContext(input: {
   const environment = readString(payload.environment)?.toLowerCase();
   const destructiveExplicit = readBoolean(payload.destructiveOperation);
 
+  function inferRecipientCount(): number | undefined {
+    if (Array.isArray(payload.recipients)) {
+      return payload.recipients.length;
+    }
+    if (Array.isArray(payload.bcc)) {
+      return payload.bcc.length;
+    }
+    const count = readNumber(payload.recipientCount);
+    if (count !== undefined) return count;
+    const to = readString(payload.to);
+    if (to?.includes(",")) {
+      return to.split(",").map((part) => part.trim()).filter(Boolean).length;
+    }
+    if (to) return 1;
+    return undefined;
+  }
+
   const dataExportSize =
     readNumber(payload.dataExportSize) ??
     readNumber(payload.recordCount) ??
     readNumber(payload.exportCount) ??
-    readNumber(payload.records);
+    readNumber(payload.records) ??
+    inferRecipientCount();
 
   return {
     toolName: input.toolName.trim(),

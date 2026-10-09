@@ -15,8 +15,8 @@ import {
 } from "./repository";
 import { renderEmailTemplate } from "./templates/render";
 import type { EmailTemplatePayload, EmailTemplateType } from "./types";
-import { buildApprovalsReviewUrl } from "@/lib/gateway/notifications/sanitize";
-import { getAppUrl } from "./env";
+import { createEmailApprovalLinks } from "@/lib/gateway/email-approval/create-token";
+import { deliverWhatsAppNotification } from "@/lib/whatsapp/service";
 
 /** Delivers a queued notification record via Resend (retry-safe). */
 export async function deliverNotification(
@@ -330,7 +330,11 @@ export async function retryNotification(
   }
 
   try {
-    await deliverNotification(supabase, notification);
+    if (notification.channel === "whatsapp") {
+      await deliverWhatsAppNotification(supabase, notification);
+    } else {
+      await deliverNotification(supabase, notification);
+    }
 
     recordAuditAsync(supabase, {
       request,
@@ -396,6 +400,19 @@ export async function notifyGatewayReviewRequiredEmail(
   }
 ): Promise<void> {
   const title = `${params.toolName} — ${params.actionType}`;
+  const reviewDeadline =
+    params.reviewDeadline ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+
+  const links = await createEmailApprovalLinks(supabase, {
+    organizationId: params.organizationId,
+    proposalId: params.proposalId,
+    reviewerId: params.userId,
+    reviewerEmail: params.recipientEmail,
+    expiresAt: reviewDeadline,
+  });
+  const approveUrl = links.approveUrl;
+  const rejectUrl = links.denyUrl;
+  const approvalsUrl = params.approvalsUrl ?? links.reviewUrl;
 
   await queueEmail(supabase, {
     organizationId: params.organizationId,
@@ -414,10 +431,10 @@ export async function notifyGatewayReviewRequiredEmail(
       riskLevel: params.riskLevel,
       riskScore: params.riskScore,
       riskReasons: params.riskReasons ?? [],
-      reviewDeadline:
-        params.reviewDeadline ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-      approvalsUrl:
-        params.approvalsUrl ?? buildApprovalsReviewUrl(params.proposalId, getAppUrl()),
+      reviewDeadline,
+      approvalsUrl: approvalsUrl ?? "",
+      approveUrl: approveUrl ?? "",
+      rejectUrl: rejectUrl ?? "",
       recipientName: params.recipientName,
     },
     severity: params.riskLevel as DetectedRisk["severity"],

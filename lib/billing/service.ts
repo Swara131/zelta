@@ -247,3 +247,36 @@ export async function getSubscriptionSummary(
     stripeSubscriptionId: subscription?.stripe_subscription_id ?? null,
   };
 }
+
+export async function cancelSubscriptionAtPeriodEnd(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string
+): Promise<{ cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null }> {
+  const organizationId = await ensureOrganization(supabase, userId, userEmail);
+  const subscription = await getOrgSubscription(supabase, organizationId);
+
+  if (!subscription) {
+    throw new BillingError("No subscription found for this workspace.");
+  }
+
+  if (effectivePlan(subscription) === "free") {
+    throw new BillingError("You are on the free plan — nothing to cancel.");
+  }
+
+  if (subscription.stripe_subscription_id) {
+    const stripe = getStripeClient();
+    await stripe.subscriptions.update(subscription.stripe_subscription_id, {
+      cancel_at_period_end: true,
+    });
+  }
+
+  const updated = await upsertOrgSubscription(supabase, organizationId, {
+    cancel_at_period_end: true,
+  });
+
+  return {
+    cancelAtPeriodEnd: updated.cancel_at_period_end,
+    currentPeriodEnd: updated.current_period_end,
+  };
+}

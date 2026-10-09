@@ -30,7 +30,7 @@ export function renderApprovalRequested(
     preheader: preview,
     title: "Approval Requested",
     bodyHtml,
-    ctaLabel: "Review in ApprovalLayer",
+    ctaLabel: "Review in Wave",
     ctaHref: `${getAppUrl()}/approvals`,
     accentColor: "#6366f1",
   });
@@ -103,7 +103,7 @@ export function renderCriticalRiskDetected(
   const preview = `Risk score ${data.overallScore}/100 · immediate review recommended`;
 
   const bodyHtml = `
-    ${paragraph(`Hi ${data.recipientName}, ApprovalLayer detected a critical security risk in your latest log analysis.`)}
+    ${paragraph(`Hi ${data.recipientName}, Wave detected a critical security risk in your latest log analysis.`)}
     <p style="margin:0 0 20px;">${severityBadge("critical")}</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
       ${detailRow("Risk", data.title)}
@@ -146,18 +146,77 @@ export function renderGatewayReviewRequested(
       ${detailRow("Action type", data.actionType)}
       ${detailRow("Tool", data.toolName)}
       ${detailRow("Risk level", data.riskLevel.toUpperCase())}
+      ${detailRow("Risk score", (data.riskScore / 100).toFixed(2))}
       ${detailRow("Review deadline", new Date(data.reviewDeadline).toLocaleString())}
     </table>
     ${paragraph(data.plainEnglishSummary)}
     ${reasonsHtml ? `<p style="margin:0 0 8px;font-size:13px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Risk signals</p>${reasonsHtml}` : ""}
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 0;">
+      <tr>
+        <td style="padding-right:12px;">
+          <a href="${escapeHtml(data.approveUrl)}" class="cta-btn" style="display:inline-block;background:#10b981;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;">Approve</a>
+        </td>
+        <td>
+          <a href="${escapeHtml(data.rejectUrl)}" class="cta-btn" style="display:inline-block;background:#ef4444;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;">Deny</a>
+        </td>
+      </tr>
+    </table>
   `;
 
   const html = emailLayout({
     preheader: preview,
-    title: "Gateway Review Required",
+    title: "Action Needs Your Approval",
     bodyHtml,
-    ctaLabel: "Review in ApprovalLayer",
+    ctaLabel: "View in dashboard",
     ctaHref: data.approvalsUrl,
+    accentColor: "#6366f1",
+  });
+
+  return { subject, preview, html };
+}
+
+export function renderAgentResult(
+  data: EmailTemplatePayload["agent_result"]
+): RenderedEmail {
+  const subject = `Wave Agent Result — ${data.agentName}`;
+  const preview = data.summary.slice(0, 120);
+  const runLabel = new Date(data.runAt).toLocaleString("en-IN", {
+    timeZone: data.timezone ?? "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const runType =
+    data.runMode === "scheduled" ? "scheduled run" : "run";
+
+  const sourcesHtml =
+    data.sources && data.sources.length > 0
+      ? `<p style="margin:24px 0 8px;font-size:13px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Sources</p>
+         <ul style="margin:0 0 20px;padding-left:20px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+           ${data.sources
+             .map(
+               (source) =>
+                 `<li style="margin-bottom:6px;">${escapeHtml(source)}</li>`
+             )
+             .join("")}
+         </ul>`
+      : "";
+
+  const bodyHtml = `
+    ${paragraph(`Hi ${data.recipientName}, your Wave agent finished its ${runType}.`)}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      ${detailRow("Run time", runLabel)}
+    </table>
+    <p style="margin:24px 0 8px;font-size:13px;color:#71717a;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Today's summary</p>
+    ${paragraph(escapeHtml(data.summary).replace(/\n/g, "<br />"))}
+    ${sourcesHtml}
+  `;
+
+  const html = emailLayout({
+    preheader: preview,
+    title: data.agentName,
+    bodyHtml,
+    ctaLabel: "View in Wave",
+    ctaHref: `${getAppUrl()}/agents/${encodeURIComponent(data.agentSlug)}`,
     accentColor: "#6366f1",
   });
 
@@ -185,6 +244,8 @@ export function renderEmailTemplate<T extends import("../types").EmailTemplateTy
       return renderGatewayReviewRequested(
         payload as EmailTemplatePayload["gateway_review_requested"]
       );
+    case "agent_result":
+      return renderAgentResult(payload as EmailTemplatePayload["agent_result"]);
     default:
       throw new Error(`Unknown email template: ${type}`);
   }

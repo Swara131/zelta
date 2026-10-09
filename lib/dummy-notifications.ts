@@ -193,8 +193,10 @@ If you did not request this access, contact Security immediately.
 
 export const CHANNEL_CONFIG = {
   email: { label: "Email", color: "#60a5fa", icon: "mail" },
+  whatsapp: { label: "WhatsApp", color: "#34d399", icon: "whatsapp" },
   slack: { label: "Slack", color: "#e879f9", icon: "slack" },
   teams: { label: "Teams", color: "#818cf8", icon: "teams" },
+  in_app: { label: "Dashboard", color: "#a78bfa", icon: "dashboard" },
 } as const;
 
 export const DELIVERY_CONFIG = {

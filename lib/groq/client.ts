@@ -3,6 +3,7 @@ import {
   AiProposalEnrichmentError,
   AiRiskAnalysisError,
   AiTranslationError,
+  AiAgentBuilderError,
   formatGroqError,
 } from "./errors";
 import { getGroqApiKey, getGroqModel } from "./env";
@@ -22,7 +23,7 @@ export function getGroqClient(): Groq {
  */
 export async function groqJsonCompletion(
   prompt: string,
-  options?: { system?: string; kind?: "translation" | "risk" | "proposal"; temperature?: number }
+  options?: { system?: string; kind?: "translation" | "risk" | "proposal" | "agent-builder"; temperature?: number }
 ): Promise<string> {
   const kind = options?.kind ?? "translation";
   const groq = getGroqClient();
@@ -45,6 +46,9 @@ export async function groqJsonCompletion(
     if (!content) {
       if (kind === "proposal") {
         throw new AiProposalEnrichmentError("Groq returned an empty response.");
+      }
+      if (kind === "agent-builder") {
+        throw new AiAgentBuilderError("Groq returned an empty response.");
       }
       throw kind === "risk"
         ? new AiRiskAnalysisError("Groq returned an empty response.")

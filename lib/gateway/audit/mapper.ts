@@ -49,6 +49,11 @@ const RUNTIME_EVENT_TITLES: Record<RuntimeAuditEventName, string> = {
   "notification.queued": "Notification Queued",
   "notification.sent": "Notification Sent",
   "notification.failed": "Notification Failed",
+  "runtime.run.started": "Agent Run Started",
+  "runtime.run.finished": "Agent Run Finished",
+  "runtime.delivery.started": "Result Delivery Started",
+  "runtime.delivery.sent": "Result Delivered",
+  "runtime.delivery.failed": "Result Delivery Failed",
 };
 
 function normalizeUser(

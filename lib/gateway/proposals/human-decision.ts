@@ -18,6 +18,7 @@ import {
 import { mapReviewProposalToPendingApproval } from "./review-mapper";
 import type { PendingApproval } from "@/lib/approval-types";
 import type { RiskSeverity } from "@/lib/risk-types";
+import { handleRuntimeProposalDecision } from "@/lib/agents/protection/runtime-bridge";
 
 export type HumanReviewDecision = "approved" | "rejected";
 
@@ -36,6 +37,12 @@ export interface DecideGatewayProposalResult {
   status: HumanReviewDecision;
   actionHash: string;
   decidedAt: string;
+  runtimeResume?: {
+    resumed: boolean;
+    runId: string | null;
+    runStatus?: string;
+    runSummary?: string | null;
+  };
 }
 
 export interface HumanDecisionDeps {
@@ -68,12 +75,18 @@ export async function listGatewayPendingApprovals(
   const refreshed: ActionProposalRow[] = [];
 
   for (const row of rows) {
-    const current = await deps.ensureFresh(supabase, {
-      proposalId: row.id,
-      organizationId,
-    });
-    if (current?.status === "review_required") {
-      refreshed.push(current);
+    try {
+      const current = await deps.ensureFresh(supabase, {
+        proposalId: row.id,
+        organizationId,
+      });
+      if (current?.status === "review_required") {
+        refreshed.push(current);
+      }
+    } catch {
+      if (row.status === "review_required") {
+        refreshed.push(row);
+      }
     }
   }
 
@@ -99,12 +112,12 @@ export async function decideGatewayProposalReview(
     throw new ProposalError("Action proposal not found.");
   }
 
-  if (existing.status === "rejected") {
-    throw new ProposalError("Proposal was automatically denied after the review deadline expired.");
+  if (existing.status === "rejected" || existing.status === "expired") {
+    throw new ProposalError("This approval has expired and cannot be executed.");
   }
 
   if (existing.status !== "review_required") {
-    throw new ProposalError(`Proposal is already ${existing.status}.`);
+    throw new ProposalError("This approval has already been resolved.");
   }
 
   const reviewDeadline = effectiveReviewDeadline(existing);
@@ -181,13 +194,42 @@ export async function decideGatewayProposalReview(
       note: params.note,
       agentId: existing.agent_id,
       reviewExpiresAt: reviewDeadline,
+      toolName: existing.tool_name,
+      actionType: existing.action_type,
+      riskScore: existing.risk_score,
+      riskLevel: existing.risk_level,
     },
   });
+
+  let runtimeResume: DecideGatewayProposalResult["runtimeResume"];
+
+  try {
+    const bridge = await handleRuntimeProposalDecision(readClient, {
+      proposal: existing,
+      userId: params.actorId,
+      userEmail: params.actorEmail,
+      decision: params.decision,
+      note: params.note,
+    });
+    runtimeResume = {
+      resumed: bridge.resumed,
+      runId: bridge.runId,
+      runStatus: bridge.runResult?.status,
+      runSummary: bridge.runResult?.summary,
+    };
+  } catch (err) {
+    console.error("Runtime agent resume after approval failed:", err);
+    runtimeResume = {
+      resumed: false,
+      runId: null,
+    };
+  }
 
   return {
     proposalId: updated.id,
     status: params.decision,
     actionHash: updated.action_hash,
     decidedAt,
+    runtimeResume,
   };
 }

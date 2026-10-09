@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  AiAgentBuilderError,
   AiProposalEnrichmentError,
   AiRiskAnalysisError,
   AiTranslationError,
@@ -130,6 +131,41 @@ export function parseProposalEnrichmentPayload(
   if (!result.success) {
     throw new AiProposalEnrichmentError(
       "Groq response did not match the expected proposal enrichment JSON schema."
+    );
+  }
+  return result.data;
+}
+
+const agentToolSchema = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  toolName: z.string().trim().min(1),
+  actionType: z.string().trim().min(1),
+});
+
+export const agentSpecResponseSchema = z.object({
+  name: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  tools: z.array(agentToolSchema).min(1).max(8),
+  protection: z
+    .array(
+      z.object({
+        level: z.string().trim().min(1),
+        label: z.string().trim().min(1),
+        description: z.string().trim().min(1),
+      })
+    )
+    .min(1)
+    .max(8),
+});
+
+export type ParsedAgentSpecResponse = z.infer<typeof agentSpecResponseSchema>;
+
+export function parseAgentSpecPayload(raw: unknown): ParsedAgentSpecResponse {
+  const result = agentSpecResponseSchema.safeParse(raw);
+  if (!result.success) {
+    throw new AiAgentBuilderError(
+      "Groq response did not match the expected agent spec JSON schema."
     );
   }
   return result.data;

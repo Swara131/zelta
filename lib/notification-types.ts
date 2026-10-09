@@ -1,6 +1,6 @@
 import type { RiskSeverity } from "./risk-types";
 
-export type NotificationChannel = "email" | "slack" | "teams";
+export type NotificationChannel = "email" | "whatsapp" | "slack" | "teams" | "in_app";
 export type NotificationStatus = "unread" | "read" | "archived";
 export type DeliveryStatus = "delivered" | "pending" | "failed" | "bounced" | "retrying";
 
@@ -21,4 +21,4 @@ export interface NotificationItem {
   maxRetries: number;
 }
 
-export type NotificationTab = "unread" | "all" | "email" | "slack" | "teams";
+export type NotificationTab = "unread" | "all" | "email" | "whatsapp" | "slack" | "teams";

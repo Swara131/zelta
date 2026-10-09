@@ -18,6 +18,7 @@ export type NotificationRow = {
   delivery_status: string;
   recipient: string;
   recipient_email: string | null;
+  recipient_phone?: string | null;
   subject: string;
   preview: string;
   retry_count: number;

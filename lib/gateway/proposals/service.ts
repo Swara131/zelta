@@ -13,7 +13,6 @@ import {
   policyDecisionToDb,
 } from "@/lib/gateway/policy/types";
 import type { PolicyDecisionOutcome } from "@/lib/gateway/policy/types";
-import type { RiskSeverity } from "@/lib/risk-types";
 import {
   buildStoredRiskReasons,
   extractMatchedPoliciesFromRiskReasons,
@@ -26,7 +25,6 @@ import {
   findProposalByIdempotencyKey,
   insertActionProposal,
   insertApprovalDecision,
-  mapProposalRow,
   mergeActionProposalShadowRisk,
   updateActionProposalPolicyOutcome,
   type ActionProposalRow,
@@ -40,6 +38,10 @@ import { runShadowRiskAnalysisSafely } from "@/lib/gateway/risk/shadow-integrati
 import { computeReviewExpiresAt } from "@/lib/gateway/review/config";
 import { recordReviewDeadlineSet } from "@/lib/gateway/review/timeout";
 import type { ProposeActionInput, ProposeActionResponse } from "./types";
+import {
+  applyGrokRiskToPolicyDecision,
+  scoreProposedActionRisk,
+} from "./risk-scoring";
 
 /** Default proposal TTL before automatic expiry (hours). */
 export const PROPOSAL_TTL_HOURS = 24;
@@ -57,6 +59,7 @@ export interface ProposeActionDeps {
   enrichProposal: typeof safeEnrichProposalAction;
   classifyShadowRisk: typeof classifyRisk;
   mergeProposalShadowRisk: typeof mergeActionProposalShadowRisk;
+  scoreProposedActionRisk: typeof scoreProposedActionRisk;
 }
 
 const defaultDeps: ProposeActionDeps = {
@@ -69,6 +72,7 @@ const defaultDeps: ProposeActionDeps = {
   enrichProposal: safeEnrichProposalAction,
   classifyShadowRisk: classifyRisk,
   mergeProposalShadowRisk: mergeActionProposalShadowRisk,
+  scoreProposedActionRisk,
 };
 
 function computeExpiresAt(from = new Date()): string {
@@ -154,12 +158,25 @@ async function applyPolicyDecision(
 
   const deterministicDecision = evaluation.decision;
 
+  const grokRisk = await deps.scoreProposedActionRisk({
+    toolName: params.toolName,
+    actionType: params.actionType,
+    payload: params.payload,
+  });
+
+  const grokApplied = applyGrokRiskToPolicyDecision({
+    deterministicDecision,
+    grokRisk,
+  });
+
+  const effectivePolicyDecision = grokApplied.decision;
+
   const enrichment: EnrichmentOutcome = await deps.enrichProposal({
     agentId: params.agentId,
     toolName: params.toolName,
     actionType: params.actionType,
     payload: params.payload,
-    policyDecision: deterministicDecision,
+    policyDecision: effectivePolicyDecision,
     matchedPolicies: evaluation.matchedPolicies,
   });
 
@@ -173,7 +190,7 @@ async function applyPolicyDecision(
       toolName: params.toolName,
       actionType: params.actionType,
       payload: params.payload,
-      policyDecision: deterministicDecision,
+      policyDecision: effectivePolicyDecision,
       matchedPolicyNames: evaluation.matchedPolicies.map((policy) => policy.name),
     },
     {
@@ -184,7 +201,7 @@ async function applyPolicyDecision(
   );
 
   const composition = composeGatewayDecision({
-    deterministicDecision,
+    deterministicDecision: effectivePolicyDecision,
     riskAssessment,
     actionHash: params.actionHash,
   });
@@ -203,6 +220,26 @@ async function applyPolicyDecision(
 
   const storedRiskReasons = {
     ...buildStoredRiskReasons(evaluation.matchedPolicies, enrichment),
+    ...(grokRisk.ok
+      ? {
+          grok: {
+            riskScore: grokRisk.data.risk_score,
+            reason: grokRisk.data.reason,
+            factors: grokRisk.data.factors,
+            decision: grokRisk.data.decision,
+            model: grokRisk.data.model,
+          },
+        }
+      : grokRisk.error
+        ? {
+            grok: {
+              failure: {
+                message: grokRisk.error,
+                recordedAt: new Date().toISOString(),
+              },
+            },
+          }
+        : {}),
     decisionComposition: toStoredDecisionComposition(composition, params.actionHash, decidedAt),
   };
 
@@ -215,8 +252,9 @@ async function applyPolicyDecision(
     decidedAt,
     reviewExpiresAt,
     plainEnglishSummary: enrichment.ok ? enrichment.data.plainEnglishSummary : null,
-    riskLevel: enrichment.ok ? enrichment.data.riskLevel : undefined,
-    riskScore: enrichment.ok ? enrichment.data.riskScore : undefined,
+    riskLevel:
+      grokApplied.riskLevel ?? (enrichment.ok ? enrichment.data.riskLevel : undefined),
+    riskScore: grokApplied.riskScore ?? (enrichment.ok ? enrichment.data.riskScore : undefined),
   });
 
   await deps.insertDecision(supabase, {
@@ -236,8 +274,36 @@ async function applyPolicyDecision(
             model: enrichment.data.model,
           }
         : { failure: storedRiskReasons.ai?.failure ?? null },
+      grokRisk: grokRisk.ok
+        ? {
+            riskScore: grokRisk.data.risk_score,
+            decision: grokRisk.data.decision,
+            reason: grokRisk.data.reason,
+            factors: grokRisk.data.factors,
+            model: grokRisk.data.model,
+          }
+        : { failure: grokRisk.error ?? null },
     },
   });
+
+  if (grokRisk.ok) {
+    recordRuntimeAuditEventAsync(supabase, {
+      organizationId: params.organizationId,
+      proposalId: params.proposalId,
+      event: "ai.risk_analyzed",
+      agentId: params.agentId,
+      metadata: {
+        toolName: params.toolName,
+        actionType: params.actionType,
+        riskScore: grokRisk.data.risk_score,
+        decision: grokRisk.data.decision,
+        reason: grokRisk.data.reason,
+        factorCount: grokRisk.data.factors.length,
+        model: grokRisk.data.model,
+        provider: "grok",
+      },
+    });
+  }
 
   recordRuntimeAuditEventAsync(supabase, {
     organizationId: params.organizationId,

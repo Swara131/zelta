@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionProposalRow } from "@/lib/gateway/proposals/repository";
+import type { NotificationRow } from "@/lib/email/repository";
+import type { RiskSeverity } from "@/lib/risk-types";
 import {
   buildGatewayReviewNotificationParams,
   notifyGatewayReviewRequired,
@@ -9,6 +11,73 @@ import {
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const PROPOSAL_ID = "44444444-4444-4444-8444-444444444444";
+
+async function mockCreateApprovalLinks() {
+  const token = "al_rev_testtoken123";
+  return {
+    approveUrl: `https://app.example.com/approve/${token}`,
+    denyUrl: `https://app.example.com/deny/${token}`,
+    reviewUrl: `https://app.example.com/approvals?proposal=${encodeURIComponent(PROPOSAL_ID)}`,
+    tokenPrefix: "al_rev_test",
+  };
+}
+
+function mockEmailReviewer() {
+  return {
+    id: "user-1",
+    email: "reviewer@example.com",
+    full_name: "Reviewer",
+    approval_email_enabled: true,
+    approval_whatsapp_enabled: false,
+    approval_dashboard_enabled: true,
+    whatsapp_phone_e164: null,
+    whatsapp_phone_verified_at: null,
+  };
+}
+
+function mockNotificationRow(channel: "email" | "whatsapp" = "email"): NotificationRow {
+  const severity: RiskSeverity = "high";
+  return {
+    id: channel === "email" ? "notif-1" : "notif-wa-1",
+    organization_id: ORG,
+    user_id: "user-1",
+    approval_request_id: PROPOSAL_ID,
+    risk_analysis_id: null,
+    risk_title: "issue_refund",
+    risk_id: PROPOSAL_ID,
+    severity,
+    status: "unread",
+    channel,
+    delivery_status: "pending",
+    recipient: "Reviewer",
+    recipient_email: channel === "email" ? "reviewer@example.com" : null,
+    recipient_phone: channel === "whatsapp" ? "+919876543210" : null,
+    subject: "subject",
+    preview: "preview",
+    retry_count: 0,
+    max_retries: 3,
+    template_type: "gateway_review_requested",
+    template_payload: {
+      proposalId: PROPOSAL_ID,
+      agentId: "refund-agent-01",
+      toolName: "issue_refund",
+      actionType: "financial.refund",
+      plainEnglishSummary: "Refund request for customer",
+      riskLevel: "high",
+      riskScore: 75,
+      riskReasons: ["High-value transaction"],
+      reviewDeadline: new Date(Date.now() + 14_400_000).toISOString(),
+      approvalsUrl: "https://app.example.com/approvals",
+      approveUrl: "https://app.example.com/approve/token",
+      rejectUrl: "https://app.example.com/deny/token",
+      recipientName: "Reviewer",
+    },
+    provider_message_id: null,
+    last_error: null,
+    sent_at: null,
+    created_at: new Date().toISOString(),
+  };
+}
 
 function buildReviewRow(overrides: Partial<ActionProposalRow> = {}): ActionProposalRow {
   return {
@@ -127,41 +196,19 @@ describe("notifyGatewayReviewRequired", () => {
         reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
       },
       {
-        getReviewers: async () => [
-          { id: "user-1", email: "reviewer@example.com", full_name: "Reviewer" },
-        ],
-        findExisting: async () => null,
-        createRecord: async () => ({
-          id: "notif-1",
-          organization_id: ORG,
-          user_id: "user-1",
-          approval_request_id: PROPOSAL_ID,
-          risk_analysis_id: null,
-          risk_title: "issue_refund",
-          risk_id: PROPOSAL_ID,
-          severity: "high",
-          status: "unread",
-          channel: "email",
-          delivery_status: "pending",
-          recipient: "Reviewer",
-          recipient_email: "reviewer@example.com",
-          subject: "subject",
-          preview: "preview",
-          retry_count: 0,
-          max_retries: 3,
-          template_type: "gateway_review_requested",
-          template_payload: {} as never,
-          provider_message_id: null,
-          last_error: null,
-          sent_at: null,
-          created_at: new Date().toISOString(),
-        }),
-        deliver: async () => {
+        getReviewers: async () => [mockEmailReviewer()],
+        findExistingEmail: async () => null,
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => mockNotificationRow("email"),
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {
           delivered = true;
         },
+        deliverWhatsApp: async () => {},
         recordAudit: (_supabase, params) => {
           auditEvents.push(params.event);
         },
+        createApprovalLinks: mockCreateApprovalLinks,
       }
     );
 
@@ -192,23 +239,25 @@ describe("notifyGatewayReviewRequired", () => {
         reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
       },
       {
-        getReviewers: async () => [
-          { id: "user-1", email: "reviewer@example.com", full_name: "Reviewer" },
-        ],
-        findExisting: async () =>
+        getReviewers: async () => [mockEmailReviewer()],
+        findExistingEmail: async () =>
           ({
             id: "failed-1",
             delivery_status: "failed",
             retry_count: 1,
             max_retries: 3,
           }) as never,
-        createRecord: async () => {
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => {
           throw new Error("should not create when failed record exists");
         },
-        deliver: async () => {
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {
           throw new Error("should not auto-deliver failed record");
         },
+        deliverWhatsApp: async () => {},
         recordAudit: () => {},
+        createApprovalLinks: mockCreateApprovalLinks,
       }
     );
 
@@ -233,21 +282,23 @@ describe("notifyGatewayReviewRequired", () => {
         reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
       },
       {
-        getReviewers: async () => [
-          { id: "user-1", email: "reviewer@example.com", full_name: "Reviewer" },
-        ],
-        findExisting: async () => null,
-        createRecord: async () => {
+        getReviewers: async () => [mockEmailReviewer()],
+        findExistingEmail: async () => null,
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => {
           const err = new Error(
             'duplicate key value violates unique constraint "notifications_active_gateway_review_dedupe_idx"'
           ) as Error & { code?: string };
           err.code = "23505";
           throw err;
         },
-        deliver: async () => {
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {
           throw new Error("should not deliver on duplicate insert");
         },
+        deliverWhatsApp: async () => {},
         recordAudit: () => {},
+        createApprovalLinks: mockCreateApprovalLinks,
       }
     );
 
@@ -272,22 +323,70 @@ describe("notifyGatewayReviewRequired", () => {
         reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
       },
       {
-        getReviewers: async () => [
-          { id: "user-1", email: "reviewer@example.com", full_name: "Reviewer" },
-        ],
-        findExisting: async () => ({ id: "existing" } as never),
-        createRecord: async () => {
+        getReviewers: async () => [mockEmailReviewer()],
+        findExistingEmail: async () => ({ id: "existing" } as never),
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => {
           throw new Error("should not create duplicate");
         },
-        deliver: async () => {
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {
           throw new Error("should not deliver duplicate");
         },
+        deliverWhatsApp: async () => {},
         recordAudit: () => {},
+        createApprovalLinks: mockCreateApprovalLinks,
       }
     );
 
     assert.equal(result.sent, 0);
     assert.equal(result.skipped, 1);
+  });
+
+  it("sends WhatsApp when reviewer has verified WhatsApp enabled", async () => {
+    let whatsappDelivered = false;
+
+    const result = await notifyGatewayReviewRequired(
+      {} as SupabaseClient,
+      {
+        organizationId: ORG,
+        proposalId: PROPOSAL_ID,
+        agentId: "refund-agent-01",
+        toolName: "issue_refund",
+        actionType: "financial.refund",
+        actionPayload: { customerName: "Priya Singh", amount: 800_000, currency: "INR" },
+        actionHash: "hash-abc",
+        plainEnglishSummary: "Refund request",
+        riskLevel: "high",
+        riskScore: 72,
+        riskReasons: [],
+        reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
+      },
+      {
+        getReviewers: async () => [
+          {
+            ...mockEmailReviewer(),
+            approval_email_enabled: false,
+            approval_whatsapp_enabled: true,
+            whatsapp_phone_e164: "+919876543210",
+            whatsapp_phone_verified_at: new Date().toISOString(),
+          },
+        ],
+        findExistingEmail: async () => null,
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => mockNotificationRow("email"),
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {},
+        deliverWhatsApp: async () => {
+          whatsappDelivered = true;
+        },
+        recordAudit: () => {},
+        createApprovalLinks: mockCreateApprovalLinks,
+      }
+    );
+
+    assert.equal(result.sent, 1);
+    assert.equal(whatsappDelivered, true);
   });
 
   it("does not throw when delivery fails", async () => {
@@ -309,41 +408,23 @@ describe("notifyGatewayReviewRequired", () => {
         reviewExpiresAt: new Date(Date.now() + 14_400_000).toISOString(),
       },
       {
-        getReviewers: async () => [
-          { id: "user-1", email: "reviewer@example.com", full_name: "Reviewer" },
-        ],
-        findExisting: async () => null,
-        createRecord: async () => ({
+        getReviewers: async () => [mockEmailReviewer()],
+        findExistingEmail: async () => null,
+        findExistingWhatsApp: async () => null,
+        createEmailRecord: async () => ({
+          ...mockNotificationRow("email"),
           id: "notif-2",
-          organization_id: ORG,
-          user_id: "user-1",
-          approval_request_id: PROPOSAL_ID,
-          risk_analysis_id: null,
-          risk_title: "issue_refund",
-          risk_id: PROPOSAL_ID,
           severity: "low",
-          status: "unread",
-          channel: "email",
-          delivery_status: "pending",
-          recipient: "Reviewer",
-          recipient_email: "reviewer@example.com",
-          subject: "subject",
-          preview: "preview",
-          retry_count: 0,
-          max_retries: 3,
-          template_type: "gateway_review_requested",
-          template_payload: {} as never,
-          provider_message_id: null,
-          last_error: null,
-          sent_at: null,
-          created_at: new Date().toISOString(),
         }),
-        deliver: async () => {
+        createWhatsAppRecord: async () => mockNotificationRow("whatsapp"),
+        deliverEmail: async () => {
           throw new Error("Resend unavailable");
         },
+        deliverWhatsApp: async () => {},
         recordAudit: (_supabase, params) => {
           auditEvents.push(params.event);
         },
+        createApprovalLinks: mockCreateApprovalLinks,
       }
     );
 

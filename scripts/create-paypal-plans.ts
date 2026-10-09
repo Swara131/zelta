@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Create Zelta PayPal products and subscription plans (Professional + Team).
+ * Create Wave PayPal products and subscription plans (Professional + Team).
  *
  * Requires in .env.local (or environment):
  *   PAYPAL_CLIENT_ID
@@ -91,33 +91,33 @@ assertPayPalEnv();
 type PayPalProduct = { id: string; name: string };
 type PayPalPlan = { id: string; name: string; status?: string };
 
-const PRODUCT_NAME = "Zelta";
+const PRODUCT_NAME = "Wave";
 
 const PLANS = [
   {
     name: "Professional Monthly",
-    description: `Zelta Professional — $${PLAN_PRICES.professional.monthly} USD, billed every month`,
+    description: `Wave Professional — $${PLAN_PRICES.professional.monthly} USD, billed every month`,
     price: formatPayPalPrice(PLAN_PRICES.professional.monthly),
     intervalUnit: "MONTH" as const,
     envKey: "PAYPAL_PLAN_PROFESSIONAL_MONTHLY",
   },
   {
     name: "Professional Yearly",
-    description: `Zelta Professional — $${PLAN_PRICES.professional.yearly} USD, billed every year`,
+    description: `Wave Professional — $${PLAN_PRICES.professional.yearly} USD, billed every year`,
     price: formatPayPalPrice(PLAN_PRICES.professional.yearly),
     intervalUnit: "YEAR" as const,
     envKey: "PAYPAL_PLAN_PROFESSIONAL_YEARLY",
   },
   {
     name: "Team Monthly",
-    description: `Zelta Team — $${PLAN_PRICES.team.monthly} USD, billed every month`,
+    description: `Wave Team — $${PLAN_PRICES.team.monthly} USD, billed every month`,
     price: formatPayPalPrice(PLAN_PRICES.team.monthly),
     intervalUnit: "MONTH" as const,
     envKey: "PAYPAL_PLAN_TEAM_MONTHLY",
   },
   {
     name: "Team Yearly",
-    description: `Zelta Team — $${PLAN_PRICES.team.yearly} USD, billed every year`,
+    description: `Wave Team — $${PLAN_PRICES.team.yearly} USD, billed every year`,
     price: formatPayPalPrice(PLAN_PRICES.team.yearly),
     intervalUnit: "YEAR" as const,
     envKey: "PAYPAL_PLAN_TEAM_YEARLY",
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
     },
     body: JSON.stringify({
       name: PRODUCT_NAME,
-      description: "Zelta subscription plans for AI agent approval workflows",
+      description: "Wave subscription plans for AI agent approval workflows",
       type: "SERVICE",
       category: "SOFTWARE",
     }),

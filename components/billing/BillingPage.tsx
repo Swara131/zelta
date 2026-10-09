@@ -1,79 +1,117 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { CreditCard, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CreditCard } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
-import SectionHeader from "@/components/ui/SectionHeader";
-import Button from "@/components/ui/Button";
-import BillingToggle from "./BillingToggle";
-import PricingCard from "./PricingCard";
-import UsagePanel from "./UsagePanel";
+import BillingCurrentPlan from "./BillingCurrentPlan";
+import BillingUsageSection from "./BillingUsageSection";
+import PlanComparisonTable from "./PlanComparisonTable";
+import BillingPlanCards from "./BillingPlanCards";
+import BillingUpgradeValue from "./BillingUpgradeValue";
+import WhyZeltaBillingTeaser from "@/components/marketing/WhyZeltaBillingTeaser";
+import BillingFaqs from "./BillingFaqs";
+import BillingAnnualPricingNote from "./BillingAnnualPricingNote";
 import InvoiceTable from "./InvoiceTable";
+import BillingToggle from "./BillingToggle";
+import CancelBillingModal from "./CancelBillingModal";
 import UpgradePaymentModal, {
   type CheckoutProviders,
 } from "./UpgradePaymentModal";
-import { PLANS, DUMMY_BILLING } from "@/lib/dummy-billing";
-import { PLAN_LABELS, hasMinimumPlan } from "@/lib/billing/plans";
+import { DUMMY_BILLING } from "@/lib/dummy-billing";
+import {
+  countApprovalRequestsFromAudit,
+  getPlanStatusDisplay,
+  MANAGE_BILLING_UNAVAILABLE_COPY,
+  mapFounderUsage,
+  PAYMENTS_NOT_CONFIGURED_COPY,
+  type MarketingPlanId,
+} from "@/lib/billing/founder-billing-copy";
 import type { PaidPlanId } from "@/lib/billing/pricing";
+import type { AuditTimelineEntry } from "@/lib/audit/types";
 import type { BillingData, BillingInterval, PlanId } from "@/lib/billing-types";
 
 type PaymentProvider = "stripe" | "paypal";
 
-export default function BillingPage() {
-  const searchParams = useSearchParams();
-  const checkoutSuccess = searchParams.get("checkout") === "success";
-  const checkoutPlanParam = searchParams.get("plan");
-  const upgradedPlanName =
-    checkoutPlanParam && checkoutPlanParam in PLAN_LABELS
-      ? PLAN_LABELS[checkoutPlanParam as PlanId]
-      : "Professional";
+const BUSINESS_CONTACT_EMAIL = "sales@zelta.com";
 
+async function fetchAuditEntries(): Promise<AuditTimelineEntry[]> {
+  const response = await fetch("/api/audit/timeline?limit=200");
+  if (!response.ok) {
+    return [];
+  }
+  const payload = (await response.json()) as { entries?: AuditTimelineEntry[] };
+  return payload.entries ?? [];
+}
+
+export default function BillingPage() {
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [billingData, setBillingData] = useState<BillingData>(DUMMY_BILLING);
-  const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditTimelineEntry[]>([]);
+  const [agentCount, setAgentCount] = useState(0);
+  const [loadingBilling, setLoadingBilling] = useState(true);
+  const [loadingPlan, setLoadingPlan] = useState<MarketingPlanId | PlanId | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PaidPlanId>("professional");
-  const [dismissedSuccess, setDismissedSuccess] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelConfirmed, setCancelConfirmed] = useState(false);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [checkoutProviders, setCheckoutProviders] =
     useState<CheckoutProviders | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [loadingProvider, setLoadingProvider] = useState<PaymentProvider | null>(
     null
   );
-  const upgraded = checkoutSuccess && !dismissedSuccess;
+  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadBillingData = useCallback(async () => {
+    setLoadingBilling(true);
+    try {
+      const [billingRes, keysRes, auditRes, subscriptionRes] = await Promise.all([
+        fetch("/api/billing"),
+        fetch("/api/gateway/keys"),
+        fetchAuditEntries(),
+        fetch("/api/billing/subscription"),
+      ]);
 
-    async function loadBilling() {
-      try {
-        const response = await fetch("/api/billing");
-        if (!response.ok) return;
-        const payload = (await response.json()) as BillingData;
-        if (!cancelled && payload.currentPlan) {
+      if (billingRes.ok) {
+        const payload = (await billingRes.json()) as BillingData;
+        if (payload.currentPlan) {
           setBillingData(payload);
           setInterval(payload.interval);
         }
-      } catch {
-        /* keep fallback data */
       }
-    }
 
-    void loadBilling();
-    return () => {
-      cancelled = true;
-    };
+      if (keysRes.ok) {
+        const payload = (await keysRes.json()) as { keys?: { revokedAt: string | null }[] };
+        const active = (payload.keys ?? []).filter((key) => !key.revokedAt);
+        setAgentCount(active.length);
+      }
+
+      if (auditRes) {
+        setAuditEntries(auditRes);
+      }
+
+      if (subscriptionRes.ok) {
+        const payload = (await subscriptionRes.json()) as {
+          stripeCustomerId?: string | null;
+          cancelAtPeriodEnd?: boolean;
+        };
+        setHasStripeCustomer(!!payload.stripeCustomerId);
+        setCancelAtPeriodEnd(!!payload.cancelAtPeriodEnd);
+      }
+    } catch {
+      /* keep fallback data */
+    } finally {
+      setLoadingBilling(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!checkoutSuccess) return undefined;
-
-    window.history.replaceState({}, "", "/billing");
-    const timeout = window.setTimeout(() => setDismissedSuccess(true), 3000);
-    return () => window.clearTimeout(timeout);
-  }, [checkoutSuccess]);
+    void loadBillingData();
+  }, [loadBillingData]);
 
   const loadCheckoutProviders = useCallback(
     async (planId: PaidPlanId, billingInterval: BillingInterval) => {
@@ -96,24 +134,61 @@ export default function BillingPage() {
     []
   );
 
+  useEffect(() => {
+    void loadCheckoutProviders("professional", interval);
+  }, [interval, loadCheckoutProviders]);
+
+  const paymentsConfigured = useMemo(
+    () =>
+      checkoutProviders?.stripe === true || checkoutProviders?.paypal === true,
+    [checkoutProviders]
+  );
+
+  const currentPlan = billingData.currentPlan;
+  const actionsUsed =
+    billingData.usage.find((metric) => metric.label === "API Calls")?.used ?? 0;
+  const approvalRequestsUsed = useMemo(
+    () => countApprovalRequestsFromAudit(auditEntries),
+    [auditEntries]
+  );
+
+  const founderUsage = useMemo(
+    () =>
+      mapFounderUsage(
+        currentPlan,
+        actionsUsed,
+        agentCount,
+        approvalRequestsUsed,
+        interval
+      ),
+    [actionsUsed, agentCount, approvalRequestsUsed, currentPlan, interval]
+  );
+
+  const planStatus = useMemo(
+    () =>
+      getPlanStatusDisplay(
+        currentPlan,
+        interval,
+        billingData.nextBillingDate,
+        hasStripeCustomer
+      ),
+    [billingData.nextBillingDate, currentPlan, hasStripeCustomer, interval]
+  );
+
   const openUpgradeModal = useCallback(
-    async (planId: PaidPlanId) => {
+    async (planId: PaidPlanId = "professional") => {
+      if (!paymentsConfigured) {
+        setCheckoutError(PAYMENTS_NOT_CONFIGURED_COPY);
+        return;
+      }
       setSelectedPlan(planId);
       setCheckoutError(null);
       setShowPaymentModal(true);
       setCheckoutProviders(null);
       await loadCheckoutProviders(planId, interval);
     },
-    [interval, loadCheckoutProviders]
+    [interval, loadCheckoutProviders, paymentsConfigured]
   );
-
-  useEffect(() => {
-    if (!showPaymentModal) return;
-    void loadCheckoutProviders(selectedPlan, interval);
-  }, [interval, loadCheckoutProviders, selectedPlan, showPaymentModal]);
-
-  const currentPlan = billingData.currentPlan;
-  const currentPlanData = PLANS.find((p) => p.id === currentPlan)!;
 
   const startCheckout = async (provider: PaymentProvider) => {
     setCheckoutError(null);
@@ -135,54 +210,25 @@ export default function BillingPage() {
 
       if (!response.ok || !payload.url) {
         setCheckoutError(
-          payload.error ?? "Could not start checkout. Please try again."
+          payload.error ?? "Could not start checkout. Payment may not be configured yet."
         );
         return;
       }
 
       window.location.href = payload.url;
     } catch {
-      setCheckoutError("Could not start checkout. Please try again.");
+      setCheckoutError("Could not start checkout. Payment may not be configured yet.");
     } finally {
       setLoadingProvider(null);
     }
   };
 
-  const handleSelectPlan = async (planId: PlanId) => {
-    if (planId === currentPlan) return;
-
-    if (planId === "free" && currentPlan !== "free") {
-      setLoadingPlan(planId);
-      try {
-        const response = await fetch("/api/billing/portal", { method: "POST" });
-        const payload = (await response.json()) as { url?: string; error?: string };
-        if (payload.url) {
-          window.location.href = payload.url;
-          return;
-        }
-        setCheckoutError(payload.error ?? "Could not open billing portal.");
-      } finally {
-        setLoadingPlan(null);
-      }
+  const openPortal = async () => {
+    if (!hasStripeCustomer) {
+      setCheckoutError(MANAGE_BILLING_UNAVAILABLE_COPY);
       return;
     }
 
-    if (
-      (planId === "professional" || planId === "team") &&
-      hasMinimumPlan(planId, currentPlan) &&
-      planId !== currentPlan
-    ) {
-      await openUpgradeModal(planId);
-    }
-  };
-
-  const handleUpgrade = () => {
-    const nextPlan: PaidPlanId =
-      currentPlan === "free" ? "professional" : "team";
-    void openUpgradeModal(nextPlan);
-  };
-
-  const openPortal = async () => {
     setLoadingPlan(currentPlan);
     try {
       const response = await fetch("/api/billing/portal", { method: "POST" });
@@ -191,94 +237,196 @@ export default function BillingPage() {
         window.location.href = payload.url;
         return;
       }
-      setCheckoutError(payload.error ?? "Could not open billing portal.");
+      setCheckoutError(payload.error ?? MANAGE_BILLING_UNAVAILABLE_COPY);
     } finally {
       setLoadingPlan(null);
     }
   };
 
-  const upgradeCta =
-    currentPlan === "free"
-      ? "Upgrade to Professional"
-      : currentPlan === "professional"
-        ? "Upgrade to Team"
-        : null;
+  const handleCancelSubscription = async (feedback: string) => {
+    setCancelLoading(true);
+    setCancelError(null);
+
+    try {
+      const response = await fetch("/api/billing/subscription/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setCancelError(payload.error ?? "Could not cancel subscription.");
+        return;
+      }
+
+      setShowCancelModal(false);
+      setCancelConfirmed(true);
+      setCancelAtPeriodEnd(true);
+    } catch {
+      setCancelError("Could not cancel subscription. Please try again.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleContactEnterprise = () => {
+    const subject = encodeURIComponent("Wave Pro plan inquiry");
+    const body = encodeURIComponent(
+      "Hi Wave team,\n\nI'm interested in the Pro / Enterprise plan.\n\n"
+    );
+    window.location.href = `mailto:${BUSINESS_CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+  };
+
+  const handleSelectPlan = async (marketingPlanId: MarketingPlanId) => {
+    const currentMarketing =
+      currentPlan === "free" ? "free" : currentPlan === "team" ? "pro" : "growth";
+
+    if (marketingPlanId === currentMarketing) return;
+
+    if (marketingPlanId === "pro") {
+      handleContactEnterprise();
+      return;
+    }
+
+    if (marketingPlanId === "free" && currentPlan !== "free") {
+      setLoadingPlan(marketingPlanId);
+      await openPortal();
+      setLoadingPlan(null);
+      return;
+    }
+
+    if (marketingPlanId === "starter" || marketingPlanId === "growth") {
+      setLoadingPlan(marketingPlanId);
+      await openUpgradeModal("professional");
+      setLoadingPlan(null);
+    }
+  };
+
+  const canUpgrade = currentPlan === "free";
+  const canManageBilling = hasStripeCustomer;
+  const canCancelPlan = currentPlan !== "free" && !cancelAtPeriodEnd;
 
   return (
-    <PageShell maxWidth="6xl" className="stripe-billing-page">
+    <PageShell maxWidth="6xl" className="stripe-billing-page bill-page">
       <PageHeader
         icon={CreditCard}
-        title="Billing"
-        description="Manage your subscription, usage, and payment history."
+        title="Your Subscription & Usage"
+        description="Transparent pricing. No hidden fees."
       />
 
-      <section className="ds-section stripe-current-plan ds-panel p-6 sm:p-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ds-label text-[var(--ds-brand)]">Current plan</p>
-            <h3 className="mt-1 text-2xl font-bold tracking-tight text-[var(--ds-text-primary)]">
-              {currentPlanData.name}
-            </h3>
-            <p className="mt-2 ds-page-description !mt-2 !max-w-none">
-              {currentPlan === "free"
-                ? "Upgrade to unlock AI Translator, advanced analytics, and more."
-                : `Renews on ${new Date(billingData.nextBillingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
-            </p>
-            {currentPlan !== "free" && (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => void openPortal()}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    void openPortal();
-                  }
-                }}
-                className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-[var(--ds-text-secondary)]"
-              >
-                <CreditCard className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                {billingData.paymentMethod.brand} ···· {billingData.paymentMethod.last4}
-                <span className="text-[var(--ds-text-muted)]">
-                  Exp {billingData.paymentMethod.expMonth}/
-                  {billingData.paymentMethod.expYear}
-                </span>
-              </div>
-            )}
-          </div>
+      {!paymentsConfigured && !loadingBilling ? (
+        <div className="bill-payments-placeholder" role="note">
+          <p>{PAYMENTS_NOT_CONFIGURED_COPY}</p>
+        </div>
+      ) : null}
 
-          {upgradeCta && (
-            <Button
-              variant="primary"
-              size="lg"
-              icon={Sparkles}
-              loading={loadingPlan !== null && showPaymentModal}
-              onClick={handleUpgrade}
-              disabled={!!loadingPlan}
-            >
-              {loadingPlan !== null && showPaymentModal ? "Upgrading…" : upgradeCta}
-            </Button>
-          )}
+      {cancelConfirmed || cancelAtPeriodEnd ? (
+        <div className="bill-alert bill-alert-success" role="status">
+          Your plan cancels at end of billing period
+        </div>
+      ) : null}
+
+      {checkoutError && !showPaymentModal && !showCancelModal ? (
+        <div className="bill-alert bill-alert-error" role="alert">
+          {checkoutError}
+        </div>
+      ) : null}
+
+      <section className="ds-section">
+        <BillingCurrentPlan planId={currentPlan} planStatus={planStatus} />
+
+        <div className="bill-action-bar">
+          <button
+            type="button"
+            className="ds-btn ds-btn-primary"
+            disabled={!canUpgrade || loadingPlan !== null}
+            onClick={() => void openUpgradeModal("professional")}
+          >
+            Upgrade
+          </button>
+          <button
+            type="button"
+            className="ds-btn ds-btn-secondary"
+            onClick={() => {
+              document
+                .getElementById("bill-plans-heading")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            Change Plan
+          </button>
+          <button
+            type="button"
+            className="ds-btn ds-btn-secondary"
+            disabled={!canManageBilling || loadingPlan !== null}
+            onClick={() => void openPortal()}
+          >
+            Manage Billing
+          </button>
+          <button
+            type="button"
+            className="ds-btn bill-btn-danger bill-action-cancel"
+            disabled={!canCancelPlan || loadingPlan !== null || cancelLoading}
+            onClick={() => {
+              setCancelError(null);
+              setShowCancelModal(true);
+            }}
+          >
+            Cancel Plan
+          </button>
+        </div>
+      </section>
+
+      <section className="ds-section">
+        <BillingUsageSection
+          usage={founderUsage}
+          loading={loadingBilling}
+          interval={interval}
+        />
+      </section>
+
+      <section className="ds-section" aria-labelledby="bill-plans-heading">
+        <div className="bill-plans-header bill-plans-header-sticky">
+          <div>
+            <h2 id="bill-plans-heading" className="bill-section-title">
+              Plans
+            </h2>
+            <p className="bill-section-desc">
+              Choose the plan that matches how many agents and actions you need Wave to protect.
+            </p>
+          </div>
+          <BillingToggle interval={interval} onChange={setInterval} />
         </div>
 
-        {checkoutError && !showPaymentModal && (
-          <div
-            className="mt-4 rounded-[var(--ds-radius-md)] bg-red-500/10 px-4 py-3 text-sm text-red-300 ring-1 ring-red-400/20"
-            role="alert"
-          >
-            {checkoutError}
-          </div>
-        )}
+        <BillingAnnualPricingNote interval={interval} />
 
-        {upgraded && (
-          <div
-            className="mt-4 rounded-[var(--ds-radius-md)] bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-400 ring-1 ring-emerald-400/20"
-            role="status"
-          >
-            Successfully upgraded to {upgradedPlanName}! Your new limits are now
-            active.
-          </div>
-        )}
+        <PlanComparisonTable interval={interval} />
+
+        <BillingPlanCards
+          currentPlan={currentPlan}
+          onSelectPlan={handleSelectPlan}
+          loadingPlan={loadingPlan}
+          paymentsConfigured={paymentsConfigured}
+          interval={interval}
+          upgradeInProgress={loadingPlan !== null}
+        />
+        <p className="bill-plans-note">
+          Checkout uses {interval === "monthly" ? "monthly" : "annual"} billing when you upgrade.
+          INR prices shown for India; international checkout may bill in USD.
+          {interval === "yearly" ? " Annual plans include a 20% discount." : null}
+        </p>
+      </section>
+
+      <BillingUpgradeValue />
+
+      <WhyZeltaBillingTeaser />
+
+      <BillingFaqs />
+
+      <section className="ds-section">
+        <InvoiceTable invoices={billingData.invoices} />
       </section>
 
       <UpgradePaymentModal
@@ -298,36 +446,18 @@ export default function BillingPage() {
         }}
       />
 
-      <section className="ds-section">
-        <UsagePanel usage={billingData.usage} planName={currentPlanData.name} />
-      </section>
-
-      <section className="ds-section">
-        <div className="mb-8 flex flex-col items-start gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <SectionHeader
-            title="Plans"
-            description="Choose the plan that fits your team."
-          />
-          <BillingToggle interval={interval} onChange={setInterval} />
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {PLANS.map((plan) => (
-            <PricingCard
-              key={plan.id}
-              plan={plan}
-              interval={interval}
-              currentPlan={currentPlan}
-              onSelect={handleSelectPlan}
-              loading={loadingPlan === plan.id}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="ds-section">
-        <InvoiceTable invoices={billingData.invoices} />
-      </section>
+      <CancelBillingModal
+        open={showCancelModal}
+        loading={cancelLoading}
+        error={cancelError}
+        onClose={() => {
+          setShowCancelModal(false);
+          setCancelError(null);
+        }}
+        onConfirm={(feedback) => {
+          void handleCancelSubscription(feedback);
+        }}
+      />
     </PageShell>
   );
 }

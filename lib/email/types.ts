@@ -3,7 +3,8 @@ export type EmailTemplateType =
   | "approval_approved"
   | "approval_rejected"
   | "critical_risk_detected"
-  | "gateway_review_requested";
+  | "gateway_review_requested"
+  | "agent_result";
 
 export type EmailTemplatePayload = {
   approval_requested: {
@@ -54,7 +55,19 @@ export type EmailTemplatePayload = {
     riskReasons: string[];
     reviewDeadline: string;
     approvalsUrl: string;
+    approveUrl: string;
+    rejectUrl: string;
     recipientName: string;
+  };
+  agent_result: {
+    agentName: string;
+    agentSlug: string;
+    summary: string;
+    sources?: string[];
+    recipientName: string;
+    runMode: string;
+    runAt: string;
+    timezone?: string;
   };
 };
 

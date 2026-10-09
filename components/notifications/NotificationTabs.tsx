@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Mail, MessageSquare, Users } from "lucide-react";
+import { Mail, MessageCircle, MessageSquare, Users } from "lucide-react";
 import type { NotificationTab } from "@/lib/notification-types";
 
 interface NotificationTabsProps {
@@ -14,6 +14,7 @@ const TABS: { key: NotificationTab; label: string; icon?: LucideIcon }[] = [
   { key: "unread", label: "Unread" },
   { key: "all", label: "All" },
   { key: "email", label: "Email", icon: Mail },
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { key: "slack", label: "Slack", icon: MessageSquare },
   { key: "teams", label: "Teams", icon: Users },
 ];

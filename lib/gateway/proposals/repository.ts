@@ -29,8 +29,22 @@ export type ActionProposalRow = {
   executed_at: string | null;
 };
 
+/** Omits review_expires_at so reads work before that migration is applied. */
 const PROPOSAL_COLUMNS =
-  "id, organization_id, agent_id, tool_name, action_type, action_payload, action_hash, plain_english_summary, risk_level, risk_score, risk_reasons, policy_decision, status, requested_by, idempotency_key, created_at, updated_at, expires_at, review_expires_at, decided_at, executed_at";
+  "id, organization_id, agent_id, tool_name, action_type, action_payload, action_hash, plain_english_summary, risk_level, risk_score, risk_reasons, policy_decision, status, requested_by, idempotency_key, created_at, updated_at, expires_at, decided_at, executed_at";
+
+function isMissingReviewExpiresColumn(message: string | undefined): boolean {
+  if (!message) return false;
+  return /review_expires_at|42703/.test(message);
+}
+
+function asProposalRow(data: Record<string, unknown>): ActionProposalRow {
+  return {
+    ...(data as ActionProposalRow),
+    review_expires_at:
+      typeof data.review_expires_at === "string" ? data.review_expires_at : null,
+  };
+}
 
 const ACTIVE_STATUSES: GatewayProposalStatus[] = [
   "pending",
@@ -57,7 +71,7 @@ export async function findActiveProposalByHash(
     throw new ProposalError(error.message);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 export async function findProposalByIdempotencyKey(
@@ -80,7 +94,7 @@ export async function findProposalByIdempotencyKey(
     throw new ProposalError(error.message, "storage_error", error.code);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 export async function insertActionProposal(
@@ -94,23 +108,30 @@ export async function insertActionProposal(
     actionHash: string;
     expiresAt: string;
     requestedByUserId?: string | null;
+    agentRunId?: string | null;
     idempotencyKey?: string | null;
   }
 ): Promise<ActionProposalRow> {
+  const insertRow: Record<string, unknown> = {
+    organization_id: params.organizationId,
+    agent_id: params.agentId,
+    tool_name: params.toolName,
+    action_type: params.actionType,
+    action_payload: params.actionPayload,
+    action_hash: params.actionHash,
+    status: "pending",
+    requested_by: params.requestedByUserId ?? null,
+    idempotency_key: params.idempotencyKey ?? null,
+    expires_at: params.expiresAt,
+  };
+
+  if (params.agentRunId) {
+    insertRow.agent_run_id = params.agentRunId;
+  }
+
   const { data, error } = await supabase
     .from("action_proposals")
-    .insert({
-      organization_id: params.organizationId,
-      agent_id: params.agentId,
-      tool_name: params.toolName,
-      action_type: params.actionType,
-      action_payload: params.actionPayload,
-      action_hash: params.actionHash,
-      status: "pending",
-      requested_by: params.requestedByUserId ?? null,
-      idempotency_key: params.idempotencyKey ?? null,
-      expires_at: params.expiresAt,
-    })
+    .insert(insertRow)
     .select(PROPOSAL_COLUMNS)
     .single();
 
@@ -122,7 +143,7 @@ export async function insertActionProposal(
     );
   }
 
-  return data as ActionProposalRow;
+  return asProposalRow(data as Record<string, unknown>);
 }
 
 export async function updateActionProposalPolicyOutcome(
@@ -140,28 +161,49 @@ export async function updateActionProposalPolicyOutcome(
     riskScore?: number;
   }
 ): Promise<ActionProposalRow> {
-  const { data, error } = await supabase
+  const updatePayload: Record<string, unknown> = {
+    status: params.status,
+    policy_decision: params.policyDecision,
+    risk_reasons: params.riskReasons,
+    decided_at: params.decidedAt,
+    plain_english_summary: params.plainEnglishSummary ?? null,
+    risk_level: params.riskLevel,
+    risk_score: params.riskScore,
+  };
+
+  if (params.reviewExpiresAt) {
+    updatePayload.review_expires_at = params.reviewExpiresAt;
+  }
+
+  let { data, error } = await supabase
     .from("action_proposals")
-    .update({
-      status: params.status,
-      policy_decision: params.policyDecision,
-      risk_reasons: params.riskReasons,
-      decided_at: params.decidedAt,
-      review_expires_at: params.reviewExpiresAt ?? null,
-      plain_english_summary: params.plainEnglishSummary ?? null,
-      risk_level: params.riskLevel,
-      risk_score: params.riskScore,
-    })
+    .update(updatePayload)
     .eq("id", params.proposalId)
     .eq("organization_id", params.organizationId)
     .select(PROPOSAL_COLUMNS)
     .single();
 
+  if (
+    error &&
+    isMissingReviewExpiresColumn(error.message) &&
+    "review_expires_at" in updatePayload
+  ) {
+    const withoutReviewDeadline = { ...updatePayload };
+    delete withoutReviewDeadline.review_expires_at;
+    ({ data, error } = await supabase
+      .from("action_proposals")
+      .update(withoutReviewDeadline)
+      .eq("id", params.proposalId)
+      .eq("organization_id", params.organizationId)
+      .select(PROPOSAL_COLUMNS)
+      .single());
+  }
+
   if (error || !data) {
     throw new ProposalError(error?.message ?? "Failed to update action proposal.");
   }
 
-  return data as ActionProposalRow;
+  return asProposalRow(data as Record<string, unknown>);
 }
 
 function normalizeStoredRiskReasons(value: unknown): StoredRiskReasons {
@@ -283,7 +325,7 @@ export async function listReviewRequiredProposals(
     throw new ProposalError(error.message);
   }
 
-  return (data ?? []) as ActionProposalRow[];
+  return (data ?? []).map((row) => asProposalRow(row as Record<string, unknown>));
 }
 
 export async function getActionProposalById(
@@ -301,7 +343,7 @@ export async function getActionProposalById(
     throw new ProposalError(error.message);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 /**
@@ -319,19 +361,29 @@ export async function finalizeHumanProposalDecision(
     reviewExpiresAt: string;
   }
 ): Promise<ActionProposalRow> {
-  const { data, error } = await supabase
-    .from("action_proposals")
-    .update({
-      status: params.status,
-      decided_at: params.decidedAt,
-    })
-    .eq("id", params.proposalId)
-    .eq("organization_id", params.organizationId)
-    .eq("status", "review_required")
-    .eq("action_hash", params.actionHash)
+  const baseQuery = () =>
+    supabase
+      .from("action_proposals")
+      .update({
+        status: params.status,
+        decided_at: params.decidedAt,
+      })
+      .eq("id", params.proposalId)
+      .eq("organization_id", params.organizationId)
+      .eq("status", "review_required")
+      .eq("action_hash", params.actionHash);
+
+  let { data, error } = await baseQuery()
     .gt("review_expires_at", params.decidedAt)
     .select(PROPOSAL_COLUMNS)
     .maybeSingle();
+
+  if (error && isMissingReviewExpiresColumn(error.message)) {
+    ({ data, error } = await baseQuery()
+      .gt("expires_at", params.decidedAt)
+      .select(PROPOSAL_COLUMNS)
+      .maybeSingle());
+  }
 
   if (error) {
     throw new ProposalError(error.message);
@@ -343,7 +395,7 @@ export async function finalizeHumanProposalDecision(
     );
   }
 
-  return data as ActionProposalRow;
+  return asProposalRow(data as Record<string, unknown>);
 }
 
 /**
@@ -358,25 +410,35 @@ export async function autoDenyExpiredReviewAtomically(
     processedAt: string;
   }
 ): Promise<ActionProposalRow | null> {
-  const { data, error } = await supabase
-    .from("action_proposals")
-    .update({
-      status: "rejected",
-      decided_at: params.processedAt,
-    })
-    .eq("id", params.proposalId)
-    .eq("organization_id", params.organizationId)
-    .eq("status", "review_required")
-    .eq("action_hash", params.actionHash)
+  const baseQuery = () =>
+    supabase
+      .from("action_proposals")
+      .update({
+        status: "expired",
+        decided_at: params.processedAt,
+      })
+      .eq("id", params.proposalId)
+      .eq("organization_id", params.organizationId)
+      .eq("status", "review_required")
+      .eq("action_hash", params.actionHash);
+
+  let { data, error } = await baseQuery()
     .lte("review_expires_at", params.processedAt)
     .select(PROPOSAL_COLUMNS)
     .maybeSingle();
+
+  if (error && isMissingReviewExpiresColumn(error.message)) {
+    ({ data, error } = await baseQuery()
+      .lte("expires_at", params.processedAt)
+      .select(PROPOSAL_COLUMNS)
+      .maybeSingle());
+  }
 
   if (error) {
     throw new ProposalError(error.message);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 /**
@@ -409,10 +471,13 @@ export async function escalateExpiredReviewAtomically(
     .maybeSingle();
 
   if (error) {
+    if (isMissingReviewExpiresColumn(error.message)) {
+      return null;
+    }
     throw new ProposalError(error.message);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 export async function insertGatewayAuditEvent(
@@ -479,7 +544,7 @@ export async function markActionProposalExecutedAtomically(
     throw new ProposalError(error.message);
   }
 
-  return (data as ActionProposalRow | null) ?? null;
+  return data ? asProposalRow(data as Record<string, unknown>) : null;
 }
 
 /**

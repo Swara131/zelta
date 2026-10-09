@@ -99,7 +99,7 @@ Set for **Production**, **Preview**, and **Development** as appropriate.
 
 - [ ] Create API key at https://console.groq.com/keys
 - [ ] Set `GROQ_API_KEY` in Vercel (never `NEXT_PUBLIC_*`)
-- [ ] Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`)
+- [ ] Optional: `GROQ_MODEL` (default `openai/gpt-oss-120b`)
 - [ ] Set usage quotas and billing alerts
 - [ ] Restrict API key to server usage (do not embed in client)
 

@@ -45,7 +45,7 @@ export class AuthenticationRequiredError extends Error {
   }
 }
 
-export async function withAuthenticatedApi<T>(
+export async function withAuthenticatedApi(
   handler: (ctx: {
     supabase: SupabaseServerClient;
     user: User;

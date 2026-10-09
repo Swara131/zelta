@@ -1,10 +1,12 @@
-import AppHeader from "@/components/layout/AppHeader";
-import AppFooter from "@/components/layout/AppFooter";
+import ZeltaAppShell from "@/components/layout/ZeltaAppShell";
+import TrustToastHost from "@/components/trust/TrustToastHost";
 
-type MaxWidth = "4xl" | "6xl" | "7xl";
+type MaxWidth = "4xl" | "5xl" | "6xl" | "7xl";
+type PageLayout = "default" | "workspace";
 
 const MAX_WIDTH: Record<MaxWidth, string> = {
   "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
   "6xl": "max-w-6xl",
   "7xl": "max-w-7xl",
 };
@@ -12,25 +14,41 @@ const MAX_WIDTH: Record<MaxWidth, string> = {
 interface PageShellProps {
   children: React.ReactNode;
   maxWidth?: MaxWidth;
+  layout?: PageLayout;
   id?: string;
   className?: string;
 }
 
-export default function PageShell({ children, maxWidth = "7xl", id = "main-content", className = "" }: PageShellProps) {
+export default function PageShell({
+  children,
+  maxWidth = "7xl",
+  layout = "default",
+  id = "main-content",
+  className = "",
+}: PageShellProps) {
+  const isWorkspace = layout === "workspace";
+
   return (
-    <div className={`flex min-h-screen flex-col ${className}`.trim()}>
-      <a href={`#${id}`} className="ds-skip-link">
-        Skip to main content
-      </a>
-      <AppHeader />
-      <main
-        id={id}
-        className={`ds-page mx-auto w-full flex-1 ${MAX_WIDTH[maxWidth]}`}
-        tabIndex={-1}
+    <ZeltaAppShell>
+      <div
+        className={`flex min-h-full flex-col ${isWorkspace ? "zpage-workspace-root" : ""} ${className}`.trim()}
       >
-        {children}
-      </main>
-      <AppFooter />
-    </div>
+        <a href={`#${id}`} className="ds-skip-link">
+          Skip to main content
+        </a>
+        <div
+          id={id}
+          className={
+            isWorkspace
+              ? "zpage-workspace flex min-h-0 flex-1 flex-col"
+              : `ds-page mx-auto w-full flex-1 ${MAX_WIDTH[maxWidth]}`
+          }
+          tabIndex={-1}
+        >
+          {children}
+        </div>
+        <TrustToastHost />
+      </div>
+    </ZeltaAppShell>
   );
 }

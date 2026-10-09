@@ -1,0 +1,8 @@
+-- Run once in Supabase Dashboard → SQL Editor if agent runs, activity steps,
+-- or schedules fail with "Could not find the table 'public.agent_runs'" errors.
+--
+-- Copy and run the full contents of these migration files in order:
+--   1. supabase/migrations/20260915120000_agent_runtime_data_model.sql
+--   2. supabase/migrations/20260915140000_agent_tools_and_schedule_status.sql
+--
+-- Then refresh the Zelta app. Run history and Activity steps will persist to agent_runs.

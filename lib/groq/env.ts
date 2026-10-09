@@ -8,11 +8,15 @@ function requireEnv(name: string): string {
   return value;
 }
 
+export function isGroqConfigured(): boolean {
+  return Boolean(process.env.GROQ_API_KEY?.trim());
+}
+
 export function getGroqApiKey(): string {
   return requireEnv("GROQ_API_KEY");
 }
 
 /** Default model — override with GROQ_MODEL in .env.local if needed. */
 export function getGroqModel(): string {
-  return process.env.GROQ_MODEL?.trim() ?? "llama-3.3-70b-versatile";
+  return process.env.GROQ_MODEL?.trim() ?? "openai/gpt-oss-120b";
 }

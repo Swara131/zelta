@@ -25,6 +25,27 @@ export function extractConciseRiskReasons(riskReasons: unknown): string[] {
     }
   }
 
+  for (const factor of stored.grok?.factors ?? []) {
+    if (!factor.label?.trim() || typeof factor.weight !== "number") {
+      continue;
+    }
+
+    const signed =
+      factor.direction === "decrease"
+        ? `(-${Math.abs(factor.weight).toFixed(2)})`
+        : `(+${Math.abs(factor.weight).toFixed(2)})`;
+    reasons.push(
+      sanitizeNotificationText(`${factor.label.trim()} ${signed}`, 200)
+    );
+  }
+
+  if ((stored.grok?.factors?.length ?? 0) === 0) {
+    const grokReason = stored.grok?.reason?.trim();
+    if (grokReason) {
+      reasons.push(sanitizeNotificationText(grokReason, 200));
+    }
+  }
+
   for (const reason of stored.ai?.riskReasons ?? []) {
     if (typeof reason === "string" && reason.trim()) {
       reasons.push(sanitizeNotificationText(reason, 200));

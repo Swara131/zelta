@@ -76,7 +76,7 @@ export async function createPayPalCheckoutSession(
           email_address: email,
         },
         application_context: {
-          brand_name: "Zelta",
+          brand_name: "Wave",
           locale: "en-US",
           shipping_preference: "NO_SHIPPING",
           user_action: "SUBSCRIBE_NOW",

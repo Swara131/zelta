@@ -1,21 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { History, Filter } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Activity, Loader2 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
-import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
-import EmptyState from "@/components/ui/EmptyState";
-import AuditTimelineFeed from "./AuditTimelineFeed";
+import FounderActivityFeed from "./FounderActivityFeed";
+import ActivityLogEntry from "./ActivityLogEntry";
+import type { AgentApiKeyRecord } from "@/lib/gateway/types";
 import type { AuditTimelineEntry } from "@/lib/audit/types";
+import {
+  ACTIVITY_DEMO_DISCLAIMER,
+  buildDemoActivityViews,
+} from "@/lib/audit/demo-activity-events";
+import {
+  applyActivityFilters,
+  buildFounderActivityViews,
+  type ActivityFilter,
+  type ActivityFilters,
+} from "@/lib/audit/activity-copy";
+import { filterAgentActionViews } from "@/lib/audit/agent-actions";
+import { CTA } from "@/lib/ux/cta-labels";
 
-type SourceFilter = "all" | "runtime" | "retrospective";
-
-const SOURCE_FILTERS: { key: SourceFilter; label: string }[] = [
-  { key: "all", label: "All Events" },
-  { key: "runtime", label: "Gateway Runtime" },
-  { key: "retrospective", label: "Log Analysis" },
+const DECISION_FILTERS: Array<{ id: ActivityFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "allowed", label: "Allowed" },
+  { id: "review", label: "Approval Required" },
+  { id: "blocked", label: "Blocked" },
 ];
+
+async function fetchGatewayKeys(): Promise<AgentApiKeyRecord[]> {
+  const response = await fetch("/api/gateway/keys");
+  if (!response.ok) {
+    return [];
+  }
+  const payload = (await response.json()) as { keys?: AgentApiKeyRecord[] };
+  return payload.keys ?? [];
+}
 
 async function fetchAuditTimeline(cursor?: string | null): Promise<{
   entries: AuditTimelineEntry[];
@@ -45,10 +67,14 @@ async function fetchAuditTimeline(cursor?: string | null): Promise<{
 }
 
 export default function AuditLogPage() {
+  const searchParams = useSearchParams();
+  const agentActionsOnly = searchParams.get("type") === "agent_action";
+
   const [entries, setEntries] = useState<AuditTimelineEntry[]>([]);
+  const [connectedKeys, setConnectedKeys] = useState<AgentApiKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [decisionFilter, setDecisionFilter] = useState<ActivityFilter>("all");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -56,18 +82,19 @@ export default function AuditLogPage() {
   useEffect(() => {
     let cancelled = false;
 
-    void fetchAuditTimeline()
-      .then((page) => {
+    void Promise.all([fetchAuditTimeline(), fetchGatewayKeys()])
+      .then(([page, keys]) => {
         if (!cancelled) {
           setEntries(page.entries);
           setNextCursor(page.nextCursor);
           setHasMore(page.hasMore);
+          setConnectedKeys(keys);
         }
       })
       .catch((err) => {
         if (!cancelled) {
           setLoadError(
-            err instanceof Error ? err.message : "Failed to load audit timeline."
+            err instanceof Error ? err.message : "Failed to load activity."
           );
         }
       })
@@ -80,14 +107,31 @@ export default function AuditLogPage() {
     };
   }, []);
 
-  const filtered = entries.filter((entry) => {
-    if (sourceFilter === "all") return true;
-    if (sourceFilter === "runtime") return entry.source === "runtime";
-    return entry.source !== "runtime";
-  });
+  const hasConnectedAgent = connectedKeys.length > 0;
+  const realActivities = useMemo(() => buildFounderActivityViews(entries), [entries]);
+  const showingDemo = !hasConnectedAgent;
+  const activities = useMemo(
+    () => (showingDemo ? buildDemoActivityViews() : realActivities),
+    [showingDemo, realActivities]
+  );
+
+  const scopedActivities = useMemo(
+    () => (agentActionsOnly ? filterAgentActionViews(activities) : activities),
+    [activities, agentActionsOnly]
+  );
+
+  const filteredActivities = useMemo(() => {
+    const filters: ActivityFilters = {
+      agent: "all",
+      decision: decisionFilter,
+      actionType: "all",
+      date: "all",
+    };
+    return applyActivityFilters(scopedActivities, filters);
+  }, [scopedActivities, decisionFilter]);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loadingMore || showingDemo) return;
     setLoadingMore(true);
 
     try {
@@ -97,67 +141,108 @@ export default function AuditLogPage() {
       setHasMore(page.hasMore);
     } catch (err) {
       setLoadError(
-        err instanceof Error ? err.message : "Failed to load more audit events."
+        err instanceof Error ? err.message : "Failed to load more activity."
       );
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, nextCursor]);
+  }, [loadingMore, nextCursor, showingDemo]);
 
   return (
-    <PageShell maxWidth="4xl">
+    <PageShell maxWidth="6xl" className="act-page">
       <PageHeader
-        icon={History}
-        title="Audit Log"
-        description="Immutable timeline of gateway runtime events and retrospective log-analysis activity for your organization."
+        icon={Activity}
+        title="Activity & Audit Log"
+        description="Complete history of actions evaluated by Wave."
         badge={
-          <PageHeaderBadges>
+          showingDemo ? (
+            <span className="ds-badge ds-badge-demo">Simulated data</span>
+          ) : (
             <span className="ds-badge ds-badge-brand">
-              <History className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-              {entries.length} events
+              <Activity className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+              Audit trail
             </span>
-          </PageHeaderBadges>
+          )
         }
       />
 
-      <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Filter audit source">
-        {SOURCE_FILTERS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={sourceFilter === key}
-            onClick={() => setSourceFilter(key)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-              sourceFilter === key
-                ? "bg-[var(--ds-brand)] text-white"
-                : "bg-[var(--ds-bg-subtle)] text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)]"
-            }`}
-          >
-            {key !== "all" && <Filter className="h-3 w-3" strokeWidth={2} />}
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {loadError && (
-        <p className="mb-4 text-sm text-red-400" role="alert">
-          {loadError}
+      {showingDemo ? (
+        <div className="act-demo-banner" role="note">
+          <p>{ACTIVITY_DEMO_DISCLAIMER}</p>
+        </div>
+      ) : agentActionsOnly ? (
+        <p className="act-lead">
+          Agent actions only — what was proposed, approved, blocked, or executed.
+        </p>
+      ) : (
+        <p className="act-lead">
+          This is the audit trail of AI agent actions — what was proposed, what Wave
+          decided, and whether the action completed.
         </p>
       )}
 
+      <section className="act-filters" aria-label="Activity filters">
+        <div className="act-filter-pills">
+          {DECISION_FILTERS.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={`act-filter-pill ${decisionFilter === filter.id ? "act-filter-pill-active" : ""}`}
+              aria-pressed={decisionFilter === filter.id}
+              onClick={() => setDecisionFilter(filter.id)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {loadError ? (
+        <p className="mb-4 text-sm text-red-400" role="alert">
+          {loadError}
+        </p>
+      ) : null}
+
       {loading ? (
-        <p className="text-sm text-[var(--ds-text-secondary)]">Loading audit timeline…</p>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={History}
-          title="No audit events yet"
-          description="Gateway proposals, policy decisions, approvals, and log-analysis activity will appear here automatically."
-        />
+        <div className="act-loading">
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          Loading activity…
+        </div>
+      ) : !showingDemo && activities.length === 0 ? (
+        <div className="act-empty ds-panel">
+          <div className="act-empty-icon" aria-hidden="true">
+            <Activity className="h-10 w-10" strokeWidth={1.75} />
+          </div>
+          <h2 className="act-empty-title">No agent activity yet</h2>
+          <p className="act-empty-desc">
+            When your connected agents propose actions, Wave records each one here —
+            what was proposed, how it was evaluated, and the final outcome.
+          </p>
+          <div className="act-empty-actions">
+            <Link href="/test-action" className="ds-btn ds-btn-primary">
+              Test an Action
+            </Link>
+            <Link href="/onboarding/connect" className="ds-btn ds-btn-secondary">
+              {CTA.connectExistingAgent}
+            </Link>
+          </div>
+        </div>
+      ) : filteredActivities.length === 0 ? (
+        <div className="act-empty ds-panel">
+          <h2 className="act-empty-title">No activities match this filter</h2>
+          <p className="act-empty-desc">Try selecting a different filter to see more events.</p>
+        </div>
       ) : (
         <>
-          <AuditTimelineFeed entries={filtered} />
-          {hasMore && sourceFilter === "all" && (
+          {!showingDemo ? (
+            <div className="act-log-list" aria-label="Activity summary">
+              {filteredActivities.map((activity) => (
+                <ActivityLogEntry key={`summary-${activity.id}`} activity={activity} />
+              ))}
+            </div>
+          ) : null}
+          <FounderActivityFeed activities={filteredActivities} />
+          {hasMore && !showingDemo ? (
             <div className="mt-6 flex justify-center">
               <button
                 type="button"
@@ -168,7 +253,7 @@ export default function AuditLogPage() {
                 {loadingMore ? "Loading…" : "Load more"}
               </button>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </PageShell>

@@ -1,139 +1,180 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  BarChart3,
-  Zap,
-  ShieldBan,
-  Clock,
-  CheckCircle2,
-  Calendar,
-  Download,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { BarChart3, Loader2 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
-import { PageHeaderBadges } from "@/components/ui/DemoModeBadge";
-import SectionHeader from "@/components/ui/SectionHeader";
-import Button from "@/components/ui/Button";
-import MetricCard from "./MetricCard";
-import AnalyticsPieChart from "./AnalyticsPieChart";
-import AnalyticsAreaChart from "./AnalyticsAreaChart";
-import AnalyticsLineChart from "./AnalyticsLineChart";
-import ActivityHeatmap from "./ActivityHeatmap";
-import UserRankList from "./UserRankList";
-import DepartmentTable from "./DepartmentTable";
-import RecentActivityFeed from "./RecentActivityFeed";
-import type { AnalyticsData } from "@/lib/analytics-types";
-import { DUMMY_ANALYTICS } from "@/lib/dummy-analytics";
+import InsightsMetricGrid from "./InsightsMetricGrid";
+import InsightsProtectionBreakdown from "./InsightsProtectionBreakdown";
+import InsightsTopRiskyActions from "./InsightsTopRiskyActions";
+import InsightsAgentProtection from "./InsightsAgentProtection";
+import type { AgentApiKeyRecord } from "@/lib/gateway/types";
+import type { AuditTimelineEntry } from "@/lib/audit/types";
+import {
+  buildDemoFounderInsights,
+  INSIGHTS_DEMO_DISCLAIMER,
+} from "@/lib/analytics/demo-insights";
+import {
+  buildFounderInsights,
+  INSIGHTS_PAGE_QUESTION,
+} from "@/lib/analytics/founder-insights";
+import { CTA } from "@/lib/ux/cta-labels";
+
+async function fetchGatewayKeys(): Promise<AgentApiKeyRecord[]> {
+  const response = await fetch("/api/gateway/keys");
+  if (!response.ok) {
+    return [];
+  }
+  const payload = (await response.json()) as { keys?: AgentApiKeyRecord[] };
+  return payload.keys ?? [];
+}
+
+async function fetchAuditEntries(): Promise<AuditTimelineEntry[]> {
+  const response = await fetch("/api/audit/timeline?limit=200");
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as { entries?: AuditTimelineEntry[] };
+  return payload.entries ?? [];
+}
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData>(DUMMY_ANALYTICS);
+  const [entries, setEntries] = useState<AuditTimelineEntry[]>([]);
+  const [connectedKeys, setConnectedKeys] = useState<AgentApiKeyRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDashboard() {
-      try {
-        const response = await fetch("/api/analytics/dashboard");
-        if (!response.ok) return;
-        const payload = (await response.json()) as AnalyticsData;
-        if (!cancelled && payload.kpis) {
-          setData(payload);
-        }
-      } catch {
-        /* keep fallback data */
-      }
+  const loadData = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const [auditEntries, keys] = await Promise.all([
+        fetchAuditEntries(),
+        fetchGatewayKeys(),
+      ]);
+      setEntries(auditEntries);
+      setConnectedKeys(keys);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load insights.");
+    } finally {
+      setLoading(false);
     }
-
-    void loadDashboard();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "analytics-report.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const hasConnectedAgent = connectedKeys.length > 0;
+  const showingDemo = !hasConnectedAgent;
+  const insights = useMemo(
+    () => (showingDemo ? buildDemoFounderInsights() : buildFounderInsights(entries)),
+    [showingDemo, entries]
+  );
 
   return (
-    <PageShell>
+    <PageShell maxWidth="6xl" className="ins-page">
       <PageHeader
         icon={BarChart3}
-        title="Analytics"
-        description="Executive dashboard for agent action monitoring and approval performance."
+        title="Protection Insights"
+        description={INSIGHTS_PAGE_QUESTION}
         badge={
-          <PageHeaderBadges>
-            <span className="ds-badge ds-badge-success">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
-              Live
-            </span>
-          </PageHeaderBadges>
-        }
-        actions={
-          <Button variant="secondary" size="sm" icon={Download} onClick={handleExport}>
-            Export
-          </Button>
+          showingDemo ? (
+            <span className="ds-badge ds-badge-demo">Simulated data</span>
+          ) : undefined
         }
       />
 
-      <section className="ds-section grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Key metrics">
-        <MetricCard kpi={data.kpis.todaysActions} icon={Zap} accent="#635bff" />
-        <MetricCard kpi={data.kpis.blockedActions} icon={ShieldBan} accent="#f87171" />
-        <MetricCard kpi={data.kpis.approvalTime} icon={Clock} accent="#06b6d4" />
-        <MetricCard kpi={data.kpis.successRate} icon={CheckCircle2} accent="#34d399" />
-      </section>
+      {showingDemo ? (
+        <div className="ins-demo-banner" role="note">
+          <p>{INSIGHTS_DEMO_DISCLAIMER}</p>
+        </div>
+      ) : null}
 
-      <section className="ds-section grid grid-cols-1 gap-4 lg:grid-cols-2" aria-label="Trend charts">
-        <AnalyticsAreaChart
-          title="Weekly Trends"
-          subtitle="Actions and blocked events — last 7 days"
-          data={data.weeklyTrend}
-        />
-        <AnalyticsLineChart
-          title="Monthly Trends"
-          subtitle="6-month action volume"
-          data={data.monthlyTrend}
-        />
-      </section>
+      {loadError ? (
+        <p className="mb-4 text-sm text-red-400" role="alert">
+          {loadError}
+        </p>
+      ) : null}
 
-      <section className="ds-section grid grid-cols-1 gap-4 lg:grid-cols-3" aria-label="Distribution and activity">
-        <AnalyticsPieChart
-          title="Departments"
-          subtitle="Action volume by team"
-          data={data.departmentPie}
-        />
-        <AnalyticsPieChart
-          title="Approval Outcomes"
-          subtitle="Action disposition breakdown"
-          data={data.actionTypePie}
-        />
-        <ActivityHeatmap data={data.heatmap} />
-      </section>
+      {loading ? (
+        <div className="ins-loading">
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          Loading protection insights…
+        </div>
+      ) : !showingDemo && !insights.hasData ? (
+        <section className="ds-section">
+          <div className="ins-empty-panel ds-panel">
+            <h2 className="ins-empty-title">No protection activity yet</h2>
+            <p className="ins-empty-desc">
+              When your connected agents propose actions, Wave records how each one was
+              checked, allowed, sent for approval, or blocked.
+            </p>
+            <div className="ins-empty-actions">
+              <Link href="/test-action" className="ds-btn ds-btn-primary">
+                Test an Action
+              </Link>
+              <Link href="/onboarding/connect" className="ds-btn ds-btn-secondary">
+                {CTA.connectExistingAgent}
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="ds-section" aria-labelledby="insights-metrics-heading">
+            <InsightsMetricGrid metrics={insights.metrics} />
+          </section>
 
-      <section className="ds-section grid grid-cols-1 gap-4 lg:grid-cols-3" aria-label="Users and departments">
-        <UserRankList
-          title="Top Risky Users"
-          users={data.topRiskyUsers}
-          variant="risky"
-        />
-        <UserRankList
-          title="Most Active Users"
-          users={data.mostActiveUsers}
-          variant="active"
-        />
-        <DepartmentTable departments={data.departments} />
-      </section>
+          <section className="ds-section" aria-labelledby="protection-overview-heading">
+            <h2 id="protection-overview-heading" className="ins-section-title">
+              Protection Overview
+            </h2>
+            <p className="ins-section-desc">
+              How Wave handled every checked action — allowed, sent for approval, or blocked.
+            </p>
+            <div className="ds-panel ins-panel">
+              <InsightsProtectionBreakdown items={insights.protectionBreakdown} />
+            </div>
+          </section>
 
-      <section className="ds-section" aria-label="Recent activity">
-        <SectionHeader icon={Calendar} title="Activity Feed" />
-        <RecentActivityFeed items={data.recentActivity} />
-      </section>
+          <section className="ds-section" aria-labelledby="top-risky-actions-heading">
+            <h2 id="top-risky-actions-heading" className="ins-section-title">
+              Top Risky Actions
+            </h2>
+            <p className="ins-section-desc">
+              Action types Wave watches most closely because they can affect customers, access,
+              or data.
+            </p>
+            <InsightsTopRiskyActions items={insights.topRiskyActions} />
+          </section>
+
+          <section className="ds-section" aria-labelledby="agent-protection-heading">
+            <h2 id="agent-protection-heading" className="ins-section-title">
+              Agent Protection
+            </h2>
+            <p className="ins-section-desc">
+              How each agent is performing under your protection rules.
+            </p>
+            <InsightsAgentProtection agents={insights.agentProtection} />
+          </section>
+
+          <section className="ds-section">
+            <article className="ins-explainer ds-panel">
+              <h2 className="ins-explainer-title">What this tells you</h2>
+              <p className="ins-explainer-body">
+                These insights show whether Wave is letting safe actions through, pausing risky
+                ones for your approval, and blocking actions that break your rules. Every number
+                reflects a real protection decision — not generic analytics.
+              </p>
+              <Link href="/audit" className="ds-btn ds-btn-secondary ins-explainer-link">
+                {CTA.viewActivity}
+              </Link>
+            </article>
+          </section>
+        </>
+      )}
     </PageShell>
   );
 }

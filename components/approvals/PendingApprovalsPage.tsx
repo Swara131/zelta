@@ -2,34 +2,36 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  ClipboardCheck,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-} from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
-import EmptyState from "@/components/ui/EmptyState";
-import ApprovalCard from "./ApprovalCard";
+import StatusBadge from "@/components/ui/StatusBadge";
+import Skeleton from "@/components/ui/Skeleton";
+import ErrorState from "@/components/ui/ErrorState";
+import {
+  buildActionReviewView,
+  describeActionIntent,
+} from "@/lib/approvals/action-review-copy";
+import ApprovalActionCard, {
+  type ApprovalResolution,
+} from "./ApprovalActionCard";
+import ApprovalsAllClearEmptyState from "@/components/trust/empty-states/ApprovalsAllClearEmptyState";
 import type { ApprovalStatus, PendingApproval } from "@/lib/approval-types";
-import type { RiskSeverity } from "@/lib/risk-types";
+import type { AuditTimelineEntry } from "@/lib/audit/types";
+import {
+  APPROVE_SUCCESS_COPY,
+  REJECT_SUCCESS_COPY,
+} from "@/lib/approvals/action-review-copy";
 import {
   findAuthorizedProposalForDeepLink,
   parseProposalDeepLinkParam,
   shouldClearFilterForDeepLink,
   type ProposalDeepLinkFilter,
 } from "@/lib/approvals/proposal-deep-link";
+import { buildMonthlyProtectionSummary } from "@/lib/dashboard/trust-empty-states";
+import { FLOW_ERRORS } from "@/lib/ux/flow-copy";
 
 type FilterKey = ProposalDeepLinkFilter;
-
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "critical", label: "Critical" },
-  { key: "high", label: "High" },
-  { key: "medium", label: "Medium" },
-  { key: "low", label: "Low" },
-];
 
 interface Toast {
   id: string;
@@ -51,43 +53,63 @@ async function fetchPendingApprovals(): Promise<PendingApproval[]> {
   return payload.approvals ?? [];
 }
 
+async function fetchAuditEntries(): Promise<AuditTimelineEntry[]> {
+  const response = await fetch("/api/audit/timeline?limit=100");
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as { entries?: AuditTimelineEntry[] };
+  return payload.entries ?? [];
+}
+
 export default function PendingApprovalsPage() {
   const searchParams = useSearchParams();
   const deepLinkProposalId = parseProposalDeepLinkParam(searchParams.get("proposal"));
+  const deepLinkAction = searchParams.get("action");
 
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [resolved, setResolved] = useState<Record<string, ApprovalResolution>>({});
+  const [resolvedApprovals, setResolvedApprovals] = useState<Record<string, PendingApproval>>({});
+  const [auditEntries, setAuditEntries] = useState<AuditTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter] = useState<FilterKey>("all");
   const [toast, setToast] = useState<Toast | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [highlightedProposalId, setHighlightedProposalId] = useState<string | null>(
-    null
-  );
+  const [highlightedProposalId, setHighlightedProposalId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [savingApprovalId, setSavingApprovalId] = useState<string | null>(null);
+  const [autoActionHandled, setAutoActionHandled] = useState(false);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetchPendingApprovals()
-      .then((items) => {
-        if (!cancelled) setApprovals(items);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setLoadError(
-            err instanceof Error ? err.message : "Failed to load approvals."
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const loadData = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const [pending, audit] = await Promise.all([
+        fetchPendingApprovals(),
+        fetchAuditEntries(),
+      ]);
+      setApprovals(pending);
+      setAuditEntries(audit);
+    } catch {
+      setLoadError(FLOW_ERRORS.loadApprovals);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  const monthlyProtectionSummary = useMemo(
+    () => buildMonthlyProtectionSummary(auditEntries, { useDemoFallback: false }),
+    [auditEntries]
+  );
+
+  useEffect(() => {
+    void loadData();
+    const timer = window.setInterval(() => {
+      void loadData();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [loadData]);
 
   useEffect(() => {
     if (loading || !deepLinkProposalId) {
@@ -100,10 +122,11 @@ export default function PendingApprovalsPage() {
     }
 
     if (shouldClearFilterForDeepLink(filter, match)) {
-      setFilter("all");
+      // Deep links always show the targeted approval in the unfiltered list.
     }
 
     setHighlightedProposalId(match.id);
+    setSelectedId(match.id);
 
     const scrollTimer = window.setTimeout(() => {
       const node =
@@ -130,15 +153,6 @@ export default function PendingApprovalsPage() {
     [approvals, filter]
   );
 
-  const stats = useMemo(
-    () => ({
-      total: approvals.length,
-      critical: approvals.filter((a) => a.riskSeverity === "critical").length,
-      p1: approvals.filter((a) => a.priority === "p1").length,
-    }),
-    [approvals]
-  );
-
   const showToast = (message: string, type: Toast["type"] = "success") => {
     const id = crypto.randomUUID();
     setToast({ id, message, type });
@@ -157,7 +171,7 @@ export default function PendingApprovalsPage() {
         pending: "Pending",
       };
 
-      setRemovingId(id);
+      setSavingApprovalId(id);
 
       try {
         const response = await fetch(`/api/approvals/${id}`, {
@@ -166,122 +180,226 @@ export default function PendingApprovalsPage() {
           body: JSON.stringify({ decision: action, note: comment }),
         });
 
-        const payload = (await response.json()) as { error?: string };
+        const payload = (await response.json()) as {
+          error?: string;
+          result?: {
+            runtimeResume?: {
+              runStatus?: string;
+              runSummary?: string | null;
+            };
+          };
+        };
         if (!response.ok) {
-          throw new Error(payload.error ?? "Failed to process decision.");
+          throw new Error(payload.error ?? FLOW_ERRORS.saveApproval);
         }
 
-        setTimeout(() => {
-          setApprovals((prev) => prev.filter((a) => a.id !== id));
-          setRemovingId(null);
-          showToast(
-            `${labels[action]}${comment ? " with comment" : ""} — ${id}`,
-            action === "approved"
-              ? "success"
-              : action === "rejected"
-                ? "warning"
-                : "info"
-          );
-        }, 400);
+        const decidedAt = new Date().toISOString();
+        const approval = approvals.find((item) => item.id === id);
+        if (approval) {
+          setResolvedApprovals((prev) => ({ ...prev, [id]: approval }));
+        }
+
+        const runStatus = payload.result?.runtimeResume?.runStatus;
+        const runSummary = payload.result?.runtimeResume?.runSummary;
+
+        if (action === "approved") {
+          setResolved((prev) => ({
+            ...prev,
+            [id]: {
+              status: "approved",
+              decidedAt,
+              executed: runStatus !== "failed",
+              executionError: runStatus === "failed" ? runSummary ?? undefined : undefined,
+              runStatus,
+            },
+          }));
+        } else if (action === "rejected") {
+          setResolved((prev) => ({
+            ...prev,
+            [id]: {
+              status: "rejected",
+              decidedAt,
+              reason: comment ?? "Action denied",
+            },
+          }));
+        }
+
+        const message =
+          action === "approved"
+            ? APPROVE_SUCCESS_COPY
+            : action === "rejected"
+              ? REJECT_SUCCESS_COPY
+              : labels[action];
+        showToast(message, action === "approved" ? "success" : "warning");
+        void loadData();
       } catch (err) {
-        setRemovingId(null);
-        showToast(
-          err instanceof Error ? err.message : "Failed to process decision.",
-          "warning"
-        );
+        showToast(err instanceof Error ? err.message : FLOW_ERRORS.saveApproval, "warning");
+      } finally {
+        setSavingApprovalId(null);
       }
     },
-    []
+    [approvals, loadData]
   );
 
+  useEffect(() => {
+    if (
+      loading ||
+      autoActionHandled ||
+      !deepLinkProposalId ||
+      (deepLinkAction !== "approve" && deepLinkAction !== "reject")
+    ) {
+      return;
+    }
+
+    const match = findAuthorizedProposalForDeepLink(approvals, deepLinkProposalId);
+    const existingResolution = resolved[match?.id ?? ""];
+    if (!match || (existingResolution && existingResolution.status !== "pending")) {
+      return;
+    }
+
+    setAutoActionHandled(true);
+    void handleAction(
+      match.id,
+      deepLinkAction === "approve" ? "approved" : "rejected",
+      deepLinkAction === "reject" ? "Manual rejection" : undefined
+    );
+  }, [
+    loading,
+    autoActionHandled,
+    deepLinkProposalId,
+    deepLinkAction,
+    approvals,
+    resolved,
+    handleAction,
+  ]);
+
+  const visibleApprovals = useMemo(() => {
+    const pendingIds = new Set(filtered.map((a) => a.id));
+    const resolvedCards = Object.entries(resolved)
+      .filter(([id, state]) => state.status !== "pending" && !pendingIds.has(id))
+      .map(([id, state]) => {
+        const cached = resolvedApprovals[id] ?? approvals.find((a) => a.id === id);
+        return cached ? { approval: cached, resolution: state } : null;
+      })
+      .filter((item): item is { approval: PendingApproval; resolution: ApprovalResolution } =>
+        Boolean(item)
+      );
+
+    return [
+      ...filtered.map((approval) => ({
+        approval,
+        resolution: resolved[approval.id] ?? ({ status: "pending" } as ApprovalResolution),
+      })),
+      ...resolvedCards,
+    ];
+  }, [filtered, resolved, resolvedApprovals, approvals]);
+
   return (
-    <PageShell maxWidth="4xl">
+    <PageShell maxWidth="6xl" className="ap-page">
       <PageHeader
         icon={ClipboardCheck}
-        title="Pending Approvals"
-        description="Review AI-flagged actions requiring human authorization. Each card includes risk context, business justification, and recommended next steps."
-        badge={
-          <span className="ds-badge ds-badge-brand">
-            <ClipboardCheck className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-            {stats.total} pending
-          </span>
-        }
+        title="Approvals"
+        description="Review agent actions that need your approval before they run."
       />
 
-      <section
-        className="ds-section grid grid-cols-3 gap-3"
-        aria-label="Approval statistics"
-      >
-        {[
-          { icon: Clock, label: "Pending", value: stats.total },
-          { icon: AlertCircle, label: "Critical", value: stats.critical },
-          { icon: CheckCircle2, label: "P1 Priority", value: stats.p1 },
-        ].map(({ icon: Icon, label, value }) => (
-          <div key={label} className="ds-stat-card">
-            <div className="ds-stat-label">
-              <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              {label}
+      <section className="ds-section" aria-labelledby="pending-approvals-heading">
+        <div className="ap-section-intro">
+          <h2 id="pending-approvals-heading" className="ap-section-title">
+            Pending actions
+          </h2>
+          <p className="ap-section-subtitle">
+            Approve to execute the action once. Reject to block it permanently.
+          </p>
+        </div>
+
+        {loadError ? (
+          <ErrorState
+            title="Wave couldn't load approvals."
+            description="Refresh the page or check your connection, then try again."
+            onFix={() => void loadData()}
+            fixLabel="Try again"
+            technical={loadError}
+          />
+        ) : null}
+
+        {loading ? (
+          <Skeleton lines={5} />
+        ) : visibleApprovals.length === 0 ? (
+          <ApprovalsAllClearEmptyState summary={monthlyProtectionSummary} />
+        ) : (
+          <div className="ap-split">
+            <div className="ds-table-wrap ap-table-wrap">
+              <table className="ds-table">
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>Action</th>
+                    <th>Risk</th>
+                    <th>Requested</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleApprovals.map(({ approval, resolution }) => {
+                    const review = buildActionReviewView(approval);
+                    const status =
+                      resolution.status === "approved"
+                        ? "Approved"
+                        : resolution.status === "rejected"
+                          ? "Denied"
+                          : "Pending";
+                    const tone =
+                      status === "Approved"
+                        ? "success"
+                        : status === "Denied"
+                          ? "danger"
+                          : "pending";
+                    return (
+                      <tr
+                        key={approval.id}
+                        className={selectedId === approval.id ? "ap-row-selected" : ""}
+                        onClick={() => setSelectedId(approval.id)}
+                      >
+                        <td>{review.agentName}</td>
+                        <td>{describeActionIntent(approval)}</td>
+                        <td>{review.riskLabel}</td>
+                        <td>{review.timeWaiting}</td>
+                        <td>
+                          <StatusBadge tone={tone}>{status}</StatusBadge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <p className="ds-stat-value">{value}</p>
+            <aside className="ap-detail">
+              {visibleApprovals
+                .filter(({ approval }) => approval.id === (selectedId ?? highlightedProposalId ?? visibleApprovals[0]?.approval.id))
+                .slice(0, 1)
+                .map(({ approval, resolution }, index) => (
+                  <div
+                    key={approval.id}
+                    ref={(node) => {
+                      cardRefs.current.set(approval.id, node);
+                    }}
+                  >
+                    <ApprovalActionCard
+                      approval={approval}
+                      index={index}
+                      highlighted={highlightedProposalId === approval.id}
+                      resolution={resolution}
+                      saving={savingApprovalId === approval.id}
+                      onAction={handleAction}
+                    />
+                  </div>
+                ))}
+            </aside>
           </div>
-        ))}
+        )}
       </section>
 
-      <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Filter by severity">
-        {FILTERS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={filter === key}
-            onClick={() => setFilter(key)}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-              filter === key
-                ? "bg-[var(--ds-brand)] text-white"
-                : "bg-[var(--ds-bg-subtle)] text-[var(--ds-text-secondary)] hover:text-[var(--ds-text-primary)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {loadError && (
-        <p className="mb-4 text-sm text-red-400" role="alert">
-          {loadError}
-        </p>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-[var(--ds-text-secondary)]">Loading approvals…</p>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="No pending approvals"
-          description="When AI actions require human review, they will appear here for authorization."
-        />
-      ) : (
-        <div className="space-y-4">
-          {filtered.map((approval, index) => (
-            <div
-              key={approval.id}
-              className={removingId === approval.id ? "approval-card-exit" : ""}
-              ref={(node) => {
-                cardRefs.current.set(approval.id, node);
-              }}
-            >
-              <ApprovalCard
-                approval={approval}
-                index={index}
-                highlighted={highlightedProposalId === approval.id}
-                onAction={handleAction}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {toast && (
+      {toast ? (
         <div
           className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${
             toast.type === "success"
@@ -294,7 +412,7 @@ export default function PendingApprovalsPage() {
         >
           {toast.message}
         </div>
-      )}
+      ) : null}
     </PageShell>
   );
 }

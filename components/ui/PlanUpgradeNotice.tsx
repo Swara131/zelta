@@ -21,7 +21,7 @@ export default function PlanUpgradeNotice({
           {featureLabel} requires the {requiredPlan} plan
         </p>
         <p className="mt-1 text-sm text-zinc-400">
-          Upgrade to unlock {featureLabel} and other {PRODUCT_NAME} premium features on Zelta.
+          Upgrade to unlock {featureLabel} and other {PRODUCT_NAME} premium features on Wave.
         </p>
       </div>
       <Link

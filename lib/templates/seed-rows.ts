@@ -1,0 +1,36 @@
+import { MARKETPLACE_TEMPLATES } from "./marketplace-catalog";
+
+export function toTemplateRow(template: (typeof MARKETPLACE_TEMPLATES)[number]) {
+  return {
+    id: template.id,
+    slug: template.slug ?? template.id,
+    name: template.name,
+    description: template.description,
+    summary: template.summary,
+    icon: template.icon,
+    category: template.category,
+    default_description: template.defaultDescription,
+    tools: template.tools,
+    trigger_type: template.triggerType,
+    supports_threshold: template.supportsThreshold,
+    default_threshold: template.defaultThreshold,
+    short_description: template.shortDescription ?? template.description,
+    long_description: template.longDescription ?? template.defaultDescription,
+    tags: template.tags ?? [],
+    risk_level: template.riskLevel ?? "medium",
+    estimated_setup_minutes: template.estimatedSetupMinutes ?? 10,
+    suggested_tools: template.suggestedIntegrations ?? [],
+    default_instructions: template.defaultInstructions ?? "",
+    example_tasks: template.exampleTasks ?? [],
+    default_trigger: template.defaultTrigger ?? template.triggerType,
+    default_safety_preset: template.defaultSafetyPreset ?? "safe",
+    default_tool_permissions: template.defaultToolPermissions ?? [],
+    default_approval_rules: template.defaultApprovalRules ?? [],
+    default_execution_limits: template.defaultExecutionLimits ?? {},
+    default_data_protection: template.defaultDataProtection ?? {},
+    is_featured: template.isFeatured ?? false,
+    is_published: template.isPublished !== false,
+    sort_order: template.sortOrder ?? 0,
+    updated_at: new Date().toISOString(),
+  };
+}

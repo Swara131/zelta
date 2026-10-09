@@ -6,6 +6,10 @@ import {
 } from "@/lib/gateway/keys/auth";
 import type { AuthenticateAgentApiKeyDeps } from "@/lib/gateway/keys/service";
 import { proposeAction, type ProposeActionDeps } from "@/lib/gateway/proposals/service";
+import {
+  scoreActionRiskWithGrok,
+  scoreProposedActionRisk,
+} from "@/lib/gateway/proposals/risk-scoring";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseJsonBody, secureError, secureJson } from "@/lib/security/api";
 import { ValidationError } from "@/lib/security/errors";
@@ -82,3 +86,9 @@ export async function handleProposeActionRequest(
 export async function POST(request: Request) {
   return handleProposeActionRequest(request);
 }
+
+/** Grok (xAI) risk scoring used during proposal evaluation. */
+export {
+  scoreActionRiskWithGrok,
+  scoreProposedActionRisk,
+};

@@ -37,7 +37,7 @@ export default function AnalyticsAreaChart({
 
   const secPoints = data
     .filter((d) => d.secondary !== undefined)
-    .map((d, i, arr) => ({
+    .map((d) => ({
       x: padX + (data.indexOf(d) / (data.length - 1)) * chartW,
       y: padY + chartH - ((d.secondary ?? 0) / maxVal) * chartH,
     }));

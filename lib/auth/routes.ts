@@ -2,6 +2,7 @@ import { DASHBOARD_ROUTE } from "@/lib/auth/config";
 
 /** Routes that require an authenticated Supabase session (dashboard). */
 export const PROTECTED_ROUTES = [
+  "/dashboard",
   "/upload",
   "/translator",
   "/risk",
@@ -11,6 +12,15 @@ export const PROTECTED_ROUTES = [
   "/integrations",
   "/billing",
   "/pipeline",
+  "/audit",
+  "/settings",
+  "/onboarding",
+  "/onboarding/welcome",
+  "/agents",
+  "/agents/templates",
+  "/templates",
+  "/decision-agents",
+  "/monitor",
 ] as const;
 
 /** Auth pages — signed-in users are redirected to the dashboard. */

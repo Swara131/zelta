@@ -4,7 +4,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy":
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+    "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()",
   "X-DNS-Prefetch-Control": "off",
   /** CSP: allow Next.js inline styles/scripts; restrict external origins. */
   "Content-Security-Policy": [

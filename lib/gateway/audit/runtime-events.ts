@@ -27,7 +27,12 @@ export type RuntimeAuditEventName =
   | "review.escalated"
   | "notification.queued"
   | "notification.sent"
-  | "notification.failed";
+  | "notification.failed"
+  | "runtime.run.started"
+  | "runtime.run.finished"
+  | "runtime.delivery.started"
+  | "runtime.delivery.sent"
+  | "runtime.delivery.failed";
 
 export type GatewayAuditDbEventType =
   | "proposal_created"
@@ -49,7 +54,12 @@ export type GatewayAuditDbEventType =
   | "decision_recorded"
   | "proposal_received"
   | "policy_evaluated"
-  | "risk_scored";
+  | "risk_scored"
+  | "runtime_run_started"
+  | "runtime_run_finished"
+  | "runtime_delivery_started"
+  | "runtime_delivery_sent"
+  | "runtime_delivery_failed";
 
 export const RUNTIME_EVENT_TO_DB: Record<RuntimeAuditEventName, GatewayAuditDbEventType> = {
   "proposal.created": "proposal_created",
@@ -78,6 +88,11 @@ export const RUNTIME_EVENT_TO_DB: Record<RuntimeAuditEventName, GatewayAuditDbEv
   "notification.queued": "review_requested",
   "notification.sent": "decision_recorded",
   "notification.failed": "ai_risk_failed",
+  "runtime.run.started": "runtime_run_started",
+  "runtime.run.finished": "runtime_run_finished",
+  "runtime.delivery.started": "runtime_delivery_started",
+  "runtime.delivery.sent": "runtime_delivery_sent",
+  "runtime.delivery.failed": "runtime_delivery_failed",
 };
 
 /** Legacy DB enum values mapped to dotted runtime names for timeline display. */
@@ -160,7 +175,8 @@ function sanitizeMetadata(metadata: Record<string, unknown>): Record<string, unk
 
 export interface RecordRuntimeAuditParams {
   organizationId: string;
-  proposalId: string;
+  /** Required for proposal-scoped events; omit for agent runtime lifecycle events. */
+  proposalId?: string | null;
   event: RuntimeAuditEventName;
   agentId?: string | null;
   actorId?: string | null;
@@ -178,23 +194,73 @@ export async function recordRuntimeAuditEvent(
   params: RecordRuntimeAuditParams
 ): Promise<void> {
   const dbEventType = RUNTIME_EVENT_TO_DB[params.event];
+  if (!dbEventType) {
+    console.error(
+      "[runtime-audit] Failed to record event:",
+      params.event,
+      "missing event_type mapping"
+    );
+    return;
+  }
+
   const metadata = sanitizeAuditMetadata({
     ...params.metadata,
     event: params.event,
-    proposalId: params.proposalId,
+    ...(params.proposalId ? { proposalId: params.proposalId } : {}),
   });
 
+  const agentRunId =
+    typeof params.metadata?.agentRunId === "string" ? params.metadata.agentRunId : null;
+  const builderAgentId =
+    typeof params.metadata?.builderAgentId === "string"
+      ? params.metadata.builderAgentId
+      : null;
+
+  const row: Record<string, unknown> = {
+    organization_id: params.organizationId,
+    action_proposal_id: params.proposalId ?? null,
+    event_type: dbEventType,
+    actor_id: params.actorId ?? null,
+    agent_id: params.agentId ?? null,
+    metadata,
+    ip_address: params.ipAddress ?? null,
+    user_agent: params.userAgent ?? null,
+  };
+
+  if (agentRunId) row.agent_run_id = agentRunId;
+  if (builderAgentId) row.builder_agent_id = builderAgentId;
+
   try {
-    const { error } = await supabase.from("audit_events").insert({
-      organization_id: params.organizationId,
-      action_proposal_id: params.proposalId,
-      event_type: dbEventType,
-      actor_id: params.actorId ?? null,
-      agent_id: params.agentId ?? null,
-      metadata,
-      ip_address: params.ipAddress ?? null,
-      user_agent: params.userAgent ?? null,
-    });
+    let { error } = await supabase.from("audit_events").insert(row);
+
+    if (
+      error &&
+      (error.message.includes("agent_run_id") ||
+        error.message.includes("builder_agent_id") ||
+        error.message.includes("schema cache"))
+    ) {
+      delete row.agent_run_id;
+      delete row.builder_agent_id;
+      ({ error } = await supabase.from("audit_events").insert(row));
+    }
+
+    if (
+      error &&
+      (error.message.includes("runtime_run_started") ||
+        error.message.includes("runtime_run_finished") ||
+        error.message.includes("runtime_delivery_started") ||
+        error.message.includes("runtime_delivery_sent") ||
+        error.message.includes("runtime_delivery_failed") ||
+        error.message.includes("invalid input value for enum"))
+    ) {
+      console.error(
+        "[runtime-audit] Failed to record event:",
+        params.event,
+        error.message,
+        "(apply migration 20260916130000_runtime_audit_run_events.sql)"
+      );
+      return;
+    }
 
     if (error) {
       console.error("[runtime-audit] Failed to record event:", params.event, error.message);

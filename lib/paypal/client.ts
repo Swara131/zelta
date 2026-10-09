@@ -33,7 +33,7 @@ async function fetchAccessToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    const body = await response.text();
+    await response.text();
     throw new BillingError(`PayPal authentication failed (${response.status}).`);
   }
 

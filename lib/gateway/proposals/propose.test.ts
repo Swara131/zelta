@@ -176,6 +176,19 @@ function createProposeDeps(overrides: Partial<Parameters<typeof proposeAction>[3
         (async (_supabase, params) => {
           lastShadowMerge = params;
         }),
+      scoreProposedActionRisk:
+        overrides.scoreProposedActionRisk ??
+        (async () => ({
+          ok: true as const,
+          data: {
+            risk_score: 0.1,
+            reason: "Low risk test action",
+            factors: [],
+            decision: "ALLOW" as const,
+            policyDecision: "ALLOW" as const,
+            model: "grok-2",
+          },
+        })),
     },
     getLastUpdated: () => lastUpdated,
     getLastShadowMerge: () => lastShadowMerge,

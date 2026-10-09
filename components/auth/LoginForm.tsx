@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { signInWithEmail } from "@/lib/auth/server-actions";
-import { AuthError } from "@/lib/auth/errors";
 import { DASHBOARD_ROUTE, sanitizeRedirect } from "@/lib/auth/routes";
 import AuthMessage from "./AuthMessage";
 import AuthDivider from "./AuthDivider";
@@ -27,11 +26,10 @@ export default function LoginForm() {
         ? "Password reset link is invalid or expired."
         : null
   );
-  const [info, setInfo] = useState<string | null>(
+  const info =
     authMessage === "password_updated"
       ? "Password updated. Sign in with your new password."
-      : null
-  );
+      : null;
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

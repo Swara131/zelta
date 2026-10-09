@@ -32,3 +32,12 @@ export function buildApprovalsReviewUrl(proposalId: string, appUrl: string): str
   const base = appUrl.replace(/\/$/, "");
   return `${base}/approvals?proposal=${encodeURIComponent(proposalId)}`;
 }
+
+export function buildApprovalsDecisionUrl(
+  proposalId: string,
+  decision: "approve" | "reject",
+  appUrl: string
+): string {
+  const base = appUrl.replace(/\/$/, "");
+  return `${base}/approvals?proposal=${encodeURIComponent(proposalId)}&action=${decision}`;
+}

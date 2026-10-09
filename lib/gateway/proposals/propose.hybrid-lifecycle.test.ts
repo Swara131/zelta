@@ -23,7 +23,6 @@ import {
   createTokenDepsWithReviewTimeout,
   hybridVerifyInput,
   proposeHybridEscalatedReview,
-  validBody,
   withHybridEnv,
 } from "./propose.hybrid.fixtures";
 
@@ -466,7 +465,7 @@ describe("hybrid lifecycle security (real token and approval services)", () => {
             humanDeps
           ),
         (err: ProposalError) => {
-          assert.match(err.message, /automatically denied/i);
+          assert.match(err.message, /expired/i);
           return true;
         }
       );
